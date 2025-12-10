@@ -1,0 +1,588 @@
+"""
+Recovery Strategy Manager
+Implements Grid Trading, Hedging, and DCA/Martingale
+All discovered from EA analysis of 428 trades
+"""
+
+from typing import Dict, List, Optional
+from datetime import datetime
+
+from config.strategy_config import (
+    GRID_ENABLED,
+    GRID_SPACING_PIPS,
+    MAX_GRID_LEVELS,
+    GRID_LOT_SIZE,
+    HEDGE_ENABLED,
+    HEDGE_TRIGGER_PIPS,
+    HEDGE_RATIO,
+    MAX_HEDGES_PER_POSITION,
+    DCA_ENABLED,
+    DCA_TRIGGER_PIPS,
+    DCA_MAX_LEVELS,
+    DCA_MULTIPLIER,
+)
+
+
+def round_volume_to_step(volume: float, step: float = 0.01, min_lot: float = 0.01, max_lot: float = 100.0) -> float:
+    """
+    Round volume to broker's step size and clamp to min/max limits
+
+    Args:
+        volume: Raw volume to round
+        step: Broker's volume step (default 0.01)
+        min_lot: Minimum allowed lot size (default 0.01)
+        max_lot: Maximum allowed lot size (default 100.0)
+
+    Returns:
+        float: Rounded and clamped volume
+    """
+    # Round to nearest step
+    rounded = round(volume / step) * step
+
+    # Clamp to broker limits
+    rounded = max(min_lot, min(rounded, max_lot))
+
+    # Round to 2 decimals for display
+    return round(rounded, 2)
+
+
+class RecoveryManager:
+    """Manage recovery strategies: Grid, Hedge, DCA/Martingale"""
+
+    def __init__(self):
+        """Initialize recovery manager"""
+        self.tracked_positions = {}  # Track positions and their recovery state
+
+    def track_position(
+        self,
+        ticket: int,
+        symbol: str,
+        entry_price: float,
+        position_type: str,
+        volume: float
+    ):
+        """
+        Start tracking a position for recovery
+
+        Args:
+            ticket: Position ticket
+            symbol: Trading symbol
+            entry_price: Entry price
+            position_type: 'buy' or 'sell'
+            volume: Initial lot size
+        """
+        self.tracked_positions[ticket] = {
+            'ticket': ticket,
+            'symbol': symbol,
+            'entry_price': entry_price,
+            'type': position_type,
+            'initial_volume': volume,
+            'grid_levels': [],
+            'hedge_tickets': [],
+            'dca_levels': [],
+            'total_volume': volume,
+            'max_underwater_pips': 0,
+            'recovery_active': False,
+            'open_time': datetime.now(),  # Track when position opened
+        }
+
+    def untrack_position(self, ticket: int):
+        """Remove position from tracking"""
+        if ticket in self.tracked_positions:
+            del self.tracked_positions[ticket]
+
+    def store_recovery_ticket(self, original_ticket: int, recovery_ticket: int, action_type: str):
+        """
+        Store ticket number for a recovery order after it's been placed
+
+        Args:
+            original_ticket: Original position ticket
+            recovery_ticket: New recovery order ticket
+            action_type: 'grid', 'hedge', or 'dca'
+        """
+        if original_ticket not in self.tracked_positions:
+            return
+
+        position = self.tracked_positions[original_ticket]
+
+        if action_type == 'grid' and position['grid_levels']:
+            # Store ticket in the most recent grid level
+            position['grid_levels'][-1]['ticket'] = recovery_ticket
+
+        elif action_type == 'hedge' and position['hedge_tickets']:
+            # Store ticket in the most recent hedge
+            position['hedge_tickets'][-1]['ticket'] = recovery_ticket
+
+        elif action_type == 'dca' and position['dca_levels']:
+            # Store ticket in the most recent DCA level
+            position['dca_levels'][-1]['ticket'] = recovery_ticket
+
+    def check_grid_trigger(
+        self,
+        ticket: int,
+        current_price: float,
+        pip_value: float = 0.0001
+    ) -> Optional[Dict]:
+        """
+        Check if we should add a grid level
+
+        Args:
+            ticket: Position ticket
+            current_price: Current market price
+            pip_value: Pip value for symbol (0.0001 for most pairs)
+
+        Returns:
+            Dict with grid order details or None
+        """
+        if not GRID_ENABLED or ticket not in self.tracked_positions:
+            return None
+
+        position = self.tracked_positions[ticket]
+
+        # Check if maxed out grid levels
+        if len(position['grid_levels']) >= MAX_GRID_LEVELS:
+            return None
+
+        entry_price = position['entry_price']
+        position_type = position['type']
+
+        # Calculate pips moved
+        if position_type == 'buy':
+            pips_moved = (entry_price - current_price) / pip_value
+        else:
+            pips_moved = (current_price - entry_price) / pip_value
+
+        # Check if underwater
+        if pips_moved <= 0:
+            return None
+
+        # Calculate expected grid levels
+        expected_levels = int(pips_moved / GRID_SPACING_PIPS) + 1
+
+        # Need to add grid level?
+        if expected_levels > len(position['grid_levels']) + 1:  # +1 for original position
+            # Calculate grid price
+            levels_added = len(position['grid_levels']) + 1
+            grid_distance = GRID_SPACING_PIPS * levels_added * pip_value
+
+            if position_type == 'buy':
+                grid_price = entry_price - grid_distance
+            else:
+                grid_price = entry_price + grid_distance
+
+            # Round grid volume to broker step size
+            grid_volume = round_volume_to_step(GRID_LOT_SIZE)
+
+            # Add to tracked levels
+            position['grid_levels'].append({
+                'price': grid_price,
+                'volume': grid_volume,
+                'time': datetime.now()
+            })
+
+            position['total_volume'] += grid_volume
+            position['recovery_active'] = True
+
+            print(f"🔹 Grid Level {len(position['grid_levels'])} triggered for {ticket}")
+            print(f"   Entry: {entry_price:.5f} → Grid: {grid_price:.5f}")
+            print(f"   Distance: {GRID_SPACING_PIPS * levels_added:.1f} pips")
+
+            return {
+                'action': 'grid',
+                'original_ticket': ticket,  # Track which position this belongs to
+                'symbol': position['symbol'],
+                'type': position_type,
+                'price': grid_price,
+                'volume': grid_volume,
+                'comment': f'Grid L{len(position["grid_levels"])} - {ticket}'
+            }
+
+        return None
+
+    def check_hedge_trigger(
+        self,
+        ticket: int,
+        current_price: float,
+        pip_value: float = 0.0001
+    ) -> Optional[Dict]:
+        """
+        Check if we should activate a hedge
+
+        Args:
+            ticket: Position ticket
+            current_price: Current market price
+            pip_value: Pip value for symbol
+
+        Returns:
+            Dict with hedge order details or None
+        """
+        if not HEDGE_ENABLED or ticket not in self.tracked_positions:
+            return None
+
+        position = self.tracked_positions[ticket]
+
+        # Check if already hedged
+        if len(position['hedge_tickets']) >= MAX_HEDGES_PER_POSITION:
+            return None
+
+        entry_price = position['entry_price']
+        position_type = position['type']
+
+        # Calculate pips underwater
+        if position_type == 'buy':
+            pips_underwater = (entry_price - current_price) / pip_value
+        else:
+            pips_underwater = (current_price - entry_price) / pip_value
+
+        # Update max underwater
+        if pips_underwater > position['max_underwater_pips']:
+            position['max_underwater_pips'] = pips_underwater
+
+        # Check if trigger reached
+        if pips_underwater >= HEDGE_TRIGGER_PIPS:
+            # Calculate hedge volume (overhedge) - based on INITIAL volume, not total
+            # Original EA hedges the initial position size, not accumulated grid/DCA
+            hedge_volume = position['initial_volume'] * HEDGE_RATIO
+
+            # Round to broker step size (0.01)
+            hedge_volume = round_volume_to_step(hedge_volume)
+
+            # Opposite direction
+            hedge_type = 'sell' if position_type == 'buy' else 'buy'
+
+            # Mark as hedged
+            position['hedge_tickets'].append({
+                'type': hedge_type,
+                'volume': hedge_volume,
+                'trigger_pips': pips_underwater,
+                'time': datetime.now()
+            })
+
+            position['recovery_active'] = True
+
+            print(f"🛡️ Hedge activated for {ticket}")
+            print(f"   Original: {position_type.upper()} {position['initial_volume']:.2f} (total exposure: {position['total_volume']:.2f})")
+            print(f"   Hedge: {hedge_type.upper()} {hedge_volume:.2f} (ratio: {HEDGE_RATIO}x on initial)")
+            print(f"   Triggered at: {pips_underwater:.1f} pips underwater")
+
+            return {
+                'action': 'hedge',
+                'original_ticket': ticket,  # Track which position this belongs to
+                'symbol': position['symbol'],
+                'type': hedge_type,
+                'volume': hedge_volume,
+                'comment': f'Hedge - {ticket}'
+            }
+
+        return None
+
+    def check_dca_trigger(
+        self,
+        ticket: int,
+        current_price: float,
+        pip_value: float = 0.0001
+    ) -> Optional[Dict]:
+        """
+        Check if we should add DCA/Martingale level
+
+        Args:
+            ticket: Position ticket
+            current_price: Current market price
+            pip_value: Pip value for symbol
+
+        Returns:
+            Dict with DCA order details or None
+        """
+        if not DCA_ENABLED or ticket not in self.tracked_positions:
+            return None
+
+        position = self.tracked_positions[ticket]
+
+        # Check if maxed out DCA levels
+        if DCA_MAX_LEVELS and len(position['dca_levels']) >= DCA_MAX_LEVELS:
+            return None
+
+        entry_price = position['entry_price']
+        position_type = position['type']
+
+        # Calculate pips moved
+        if position_type == 'buy':
+            pips_moved = (entry_price - current_price) / pip_value
+        else:
+            pips_moved = (current_price - entry_price) / pip_value
+
+        # Check if underwater enough
+        if pips_moved < DCA_TRIGGER_PIPS:
+            return None
+
+        # Calculate expected DCA levels
+        expected_levels = int(pips_moved / DCA_TRIGGER_PIPS)
+
+        # Need to add DCA level?
+        if expected_levels > len(position['dca_levels']):
+            # Calculate DCA volume (increase by multiplier)
+            if len(position['dca_levels']) == 0:
+                dca_volume = position['initial_volume'] * DCA_MULTIPLIER
+            else:
+                last_dca = position['dca_levels'][-1]
+                dca_volume = last_dca['volume'] * DCA_MULTIPLIER
+
+            # Round to broker step size (0.01)
+            dca_volume = round_volume_to_step(dca_volume)
+
+            # Add to tracked levels
+            position['dca_levels'].append({
+                'price': current_price,
+                'volume': dca_volume,
+                'level': len(position['dca_levels']) + 1,
+                'time': datetime.now()
+            })
+
+            position['total_volume'] += dca_volume
+            position['recovery_active'] = True
+
+            print(f"📊 DCA Level {len(position['dca_levels'])} triggered for {ticket}")
+            print(f"   Price: {current_price:.5f}")
+            print(f"   Volume: {dca_volume:.2f} (multiplier: {DCA_MULTIPLIER}x)")
+            print(f"   Total volume now: {position['total_volume']:.2f}")
+
+            return {
+                'action': 'dca',
+                'original_ticket': ticket,  # Track which position this belongs to
+                'symbol': position['symbol'],
+                'type': position_type,  # Same direction
+                'volume': dca_volume,
+                'comment': f'DCA L{len(position["dca_levels"])} - {ticket}'
+            }
+
+        return None
+
+    def check_all_recovery_triggers(
+        self,
+        ticket: int,
+        current_price: float,
+        pip_value: float = 0.0001
+    ) -> List[Dict]:
+        """
+        Check all recovery mechanisms at once
+
+        Args:
+            ticket: Position ticket
+            current_price: Current price
+            pip_value: Pip value for symbol
+
+        Returns:
+            List of recovery actions to take
+        """
+        actions = []
+
+        # Check grid
+        grid_action = self.check_grid_trigger(ticket, current_price, pip_value)
+        if grid_action:
+            actions.append(grid_action)
+
+        # Check hedge
+        hedge_action = self.check_hedge_trigger(ticket, current_price, pip_value)
+        if hedge_action:
+            actions.append(hedge_action)
+
+        # Check DCA
+        dca_action = self.check_dca_trigger(ticket, current_price, pip_value)
+        if dca_action:
+            actions.append(dca_action)
+
+        return actions
+
+    def get_position_status(self, ticket: int) -> Optional[Dict]:
+        """
+        Get recovery status for a position
+
+        Args:
+            ticket: Position ticket
+
+        Returns:
+            Dict with position recovery status
+        """
+        if ticket not in self.tracked_positions:
+            return None
+
+        position = self.tracked_positions[ticket]
+
+        return {
+            'ticket': ticket,
+            'symbol': position['symbol'],
+            'entry_price': position['entry_price'],
+            'type': position['type'],
+            'initial_volume': position['initial_volume'],
+            'current_volume': position['total_volume'],
+            'grid_levels': len(position['grid_levels']),
+            'hedges_active': len(position['hedge_tickets']),
+            'dca_levels': len(position['dca_levels']),
+            'max_underwater_pips': position['max_underwater_pips'],
+            'recovery_active': position['recovery_active'],
+        }
+
+    def get_all_positions_status(self) -> List[Dict]:
+        """Get status for all tracked positions"""
+        return [self.get_position_status(ticket) for ticket in self.tracked_positions.keys()]
+
+    def calculate_breakeven_price(self, ticket: int) -> Optional[float]:
+        """
+        Calculate breakeven price considering all grid/DCA levels
+
+        Args:
+            ticket: Position ticket
+
+        Returns:
+            float: Breakeven price or None
+        """
+        if ticket not in self.tracked_positions:
+            return None
+
+        position = self.tracked_positions[ticket]
+
+        total_volume = position['initial_volume']
+        weighted_price = position['entry_price'] * position['initial_volume']
+
+        # Add grid levels
+        for grid_level in position['grid_levels']:
+            total_volume += grid_level['volume']
+            weighted_price += grid_level['price'] * grid_level['volume']
+
+        # Add DCA levels
+        for dca_level in position['dca_levels']:
+            total_volume += dca_level['volume']
+            weighted_price += dca_level['price'] * dca_level['volume']
+
+        if total_volume == 0:
+            return None
+
+        breakeven = weighted_price / total_volume
+        return breakeven
+
+    def get_all_stack_tickets(self, ticket: int) -> List[int]:
+        """
+        Get all ticket numbers in a recovery stack (original + grid + hedge + DCA)
+
+        Args:
+            ticket: Original position ticket
+
+        Returns:
+            List[int]: All ticket numbers in the stack
+        """
+        if ticket not in self.tracked_positions:
+            return [ticket]  # Just the original
+
+        position = self.tracked_positions[ticket]
+        tickets = [ticket]  # Start with original
+
+        # Add grid tickets
+        for grid_level in position['grid_levels']:
+            if 'ticket' in grid_level:
+                tickets.append(grid_level['ticket'])
+
+        # Add hedge tickets
+        for hedge_info in position['hedge_tickets']:
+            if 'ticket' in hedge_info:
+                tickets.append(hedge_info['ticket'])
+
+        # Add DCA tickets
+        for dca_level in position['dca_levels']:
+            if 'ticket' in dca_level:
+                tickets.append(dca_level['ticket'])
+
+        return tickets
+
+    def calculate_net_profit(self, ticket: int, mt5_positions: List[Dict]) -> Optional[float]:
+        """
+        Calculate net profit/loss for entire recovery stack
+
+        Args:
+            ticket: Original position ticket
+            mt5_positions: List of all current MT5 positions
+
+        Returns:
+            float: Net profit in account currency, or None if error
+        """
+        if ticket not in self.tracked_positions:
+            return None
+
+        # Get all tickets in this stack
+        stack_tickets = self.get_all_stack_tickets(ticket)
+
+        # Calculate total P&L across all positions in stack
+        total_profit = 0.0
+
+        for mt5_pos in mt5_positions:
+            if mt5_pos['ticket'] in stack_tickets:
+                total_profit += mt5_pos.get('profit', 0.0)
+
+        return total_profit
+
+    def check_profit_target(
+        self,
+        ticket: int,
+        mt5_positions: List[Dict],
+        account_balance: float,
+        profit_percent: float = 1.0
+    ) -> bool:
+        """
+        Check if position stack reached profit target
+
+        Args:
+            ticket: Original position ticket
+            mt5_positions: List of all current MT5 positions
+            account_balance: Account balance
+            profit_percent: Profit target as % of balance (default 1.0%)
+
+        Returns:
+            bool: True if profit target reached
+        """
+        net_profit = self.calculate_net_profit(ticket, mt5_positions)
+
+        if net_profit is None:
+            return False
+
+        # Calculate target profit in dollars
+        target_profit = account_balance * (profit_percent / 100.0)
+
+        if net_profit >= target_profit:
+            print(f"✅ Profit target reached for {ticket}")
+            print(f"   Net profit: ${net_profit:.2f}")
+            print(f"   Target: ${target_profit:.2f} ({profit_percent}% of ${account_balance:.2f})")
+            return True
+
+        return False
+
+    def check_time_limit(self, ticket: int, hours_limit: int = 4) -> bool:
+        """
+        Check if position has been open too long
+
+        Args:
+            ticket: Original position ticket
+            hours_limit: Maximum hours before auto-close (default 4)
+
+        Returns:
+            bool: True if time limit exceeded
+        """
+        if ticket not in self.tracked_positions:
+            return False
+
+        position = self.tracked_positions[ticket]
+        open_time = position.get('open_time')
+
+        if open_time is None:
+            return False
+
+        # Calculate hours open
+        time_open = datetime.now() - open_time
+        hours_open = time_open.total_seconds() / 3600
+
+        if hours_open >= hours_limit:
+            print(f"⏰ Time limit reached for {ticket}")
+            print(f"   Open for: {hours_open:.1f} hours")
+            print(f"   Limit: {hours_limit} hours")
+            print(f"   Auto-closing stuck position...")
+            return True
+
+        return False

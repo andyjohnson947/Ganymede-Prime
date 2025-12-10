@@ -1,0 +1,61 @@
+╔════════════════════════════════════════════════════════════╗
+║                                                            ║
+║        MT5 TRADING BOT - ONE-CLICK INSTALLATION            ║
+║                                                            ║
+╚════════════════════════════════════════════════════════════╝
+
+🚀 QUICK START (3 steps):
+
+┌────────────────────────────────────────────────────────────┐
+│  STEP 1: Run Setup                                         │
+└────────────────────────────────────────────────────────────┘
+
+    Windows:    python setup.py
+    Linux/Mac:  python3 setup.py
+
+    This installs everything automatically!
+
+
+┌────────────────────────────────────────────────────────────┐
+│  STEP 2: Configure MT5                                     │
+└────────────────────────────────────────────────────────────┘
+
+    Windows:    START_BOT.bat --setup
+    Linux/Mac:  ./START_BOT.sh --setup
+
+    Or:         python run.py --setup
+
+    Enter your MT5 credentials in the GUI that opens.
+
+
+┌────────────────────────────────────────────────────────────┐
+│  STEP 3: Start Trading                                     │
+└────────────────────────────────────────────────────────────┘
+
+    Windows:    Double-click START_BOT.bat
+    Linux/Mac:  ./START_BOT.sh
+
+    Or:         python run.py
+
+
+═══════════════════════════════════════════════════════════════
+
+📚 QUICK COMMANDS:
+
+    Analyze:     START_BOT --analyze EURUSD
+    Train ML:    START_BOT --train
+    Predict:     START_BOT --predict
+    DCA Demo:    START_BOT --dca-demo
+    Data Only:   START_BOT --collect
+
+═══════════════════════════════════════════════════════════════
+
+📖 FULL DOCUMENTATION:
+
+    Quick Install:  INSTALL.md
+    Full Guide:     README.md
+    Examples:       examples/ folder
+
+═══════════════════════════════════════════════════════════════
+
+That's it! Enjoy trading! 🚀📈

@@ -170,6 +170,11 @@ def analyze_dca_quick(trades_df):
     print("💰 QUICK DCA ANALYSIS")
     print("=" * 80)
 
+    # Add default symbol if missing
+    if 'symbol' not in trades_df.columns:
+        trades_df['symbol'] = 'UNKNOWN'
+        print("⚠️  No 'symbol' column found - treating all trades as same symbol")
+
     # Sort by symbol and time
     trades_df = trades_df.sort_values(['symbol', 'entry_time'])
 
@@ -353,18 +358,17 @@ def main():
 
     # Create database for full analysis
     print("\n" + "=" * 80)
-    print("Would you like to save this data for full analysis?")
-    print("This will create data/trading_data.db")
-    print("You can then run: python analyze_recovery_strategies.py")
+    print("💾 Saving data for comprehensive analysis...")
     print("=" * 80)
 
-    response = input("\nSave to database? (y/n): ").lower().strip()
-    if response == 'y':
+    try:
         create_database(trades_df)
-        print("\n✅ Database created!")
+        print("\n✅ Database created: data/trading_data.db")
         print("\nNext steps:")
         print("1. Run: python analyze_recovery_strategies.py")
         print("2. Review: recovery_strategy_analysis.json")
+    except Exception as e:
+        print(f"\n⚠️  Could not create database: {e}")
 
     print("\n✅ Analysis complete!")
 

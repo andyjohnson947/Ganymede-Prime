@@ -7,8 +7,8 @@ All values extracted from 428 trades analyzed
 # TRADING PARAMETERS
 # =============================================================================
 
-# Symbols to trade
-SYMBOLS = []  # Will be loaded from analysis
+# Symbols to trade (from EA analysis - EURUSD primary pair)
+SYMBOLS = ['EURUSD']  # Add more symbols as needed: ['EURUSD', 'GBPUSD', 'USDJPY']
 
 # Primary timeframe for trading
 TIMEFRAME = 'H1'

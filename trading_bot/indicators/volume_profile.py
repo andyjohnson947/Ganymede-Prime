@@ -278,7 +278,7 @@ class VolumeProfile:
                 at_lvn = True
                 break
 
-        # Check swing levels
+        # Check swing levels (mutually exclusive - check low only if high not hit)
         at_swing_high = False
         for swing_high in swing_levels['swing_highs']:
             if self.check_at_level(price, swing_high):
@@ -286,10 +286,11 @@ class VolumeProfile:
                 break
 
         at_swing_low = False
-        for swing_low in swing_levels['swing_lows']:
-            if self.check_at_level(price, swing_low):
-                at_swing_low = True
-                break
+        if not at_swing_high:  # Only check swing lows if NOT at swing high
+            for swing_low in swing_levels['swing_lows']:
+                if self.check_at_level(price, swing_low):
+                    at_swing_low = True
+                    break
 
         return {
             'at_poc': at_poc,

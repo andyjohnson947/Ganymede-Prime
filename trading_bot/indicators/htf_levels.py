@@ -213,11 +213,11 @@ class HTFLevels:
         tolerance = abs(price * tolerance_pct)
 
         # Previous Day levels (high importance)
+        # VAH and VAL are mutually exclusive (resistance vs support)
         if self._at_level(price, daily.get('prev_day_vah', 0), tolerance):
             factors.append('Prev Day VAH')
             score += 2
-
-        if self._at_level(price, daily.get('prev_day_val', 0), tolerance):
+        elif self._at_level(price, daily.get('prev_day_val', 0), tolerance):
             factors.append('Prev Day VAL')
             score += 2
 
@@ -225,11 +225,11 @@ class HTFLevels:
             factors.append('Prev Day POC')
             score += 2
 
+        # High and Low are mutually exclusive (resistance vs support)
         if self._at_level(price, daily.get('prev_day_high', 0), tolerance):
             factors.append('Prev Day High')
             score += 2
-
-        if self._at_level(price, daily.get('prev_day_low', 0), tolerance):
+        elif self._at_level(price, daily.get('prev_day_low', 0), tolerance):
             factors.append('Prev Day Low')
             score += 2
 
@@ -240,18 +240,21 @@ class HTFLevels:
                 score += 2
                 break
 
-        # Daily swing levels
+        # Daily swing levels (mutually exclusive - check low only if high not hit)
+        daily_swing_high_hit = False
         for swing_high in daily.get('daily_swing_highs', []):
             if self._at_level(price, swing_high, tolerance):
                 factors.append('Daily Swing High')
                 score += 1
+                daily_swing_high_hit = True
                 break
 
-        for swing_low in daily.get('daily_swing_lows', []):
-            if self._at_level(price, swing_low, tolerance):
-                factors.append('Daily Swing Low')
-                score += 1
-                break
+        if not daily_swing_high_hit:
+            for swing_low in daily.get('daily_swing_lows', []):
+                if self._at_level(price, swing_low, tolerance):
+                    factors.append('Daily Swing Low')
+                    score += 1
+                    break
 
         # Weekly levels (highest importance)
         if self._at_level(price, weekly.get('weekly_poc', 0), tolerance):
@@ -265,26 +268,29 @@ class HTFLevels:
                 score += 3
                 break
 
-        # Previous Week levels
+        # Previous Week levels (mutually exclusive - high vs low)
         if self._at_level(price, weekly.get('prev_week_high', 0), tolerance):
             factors.append('Prev Week High')
             score += 2
-
-        if self._at_level(price, weekly.get('prev_week_low', 0), tolerance):
+        elif self._at_level(price, weekly.get('prev_week_low', 0), tolerance):
             factors.append('Prev Week Low')
             score += 2
 
-        for swing_low in weekly.get('weekly_swing_lows', []):
-            if self._at_level(price, swing_low, tolerance):
-                factors.append('Prev Week Swing Low')
-                score += 2
-                break
-
+        # Weekly swing levels (mutually exclusive - check low only if high not hit)
+        weekly_swing_high_hit = False
         for swing_high in weekly.get('weekly_swing_highs', []):
             if self._at_level(price, swing_high, tolerance):
                 factors.append('Prev Week Swing High')
                 score += 2
+                weekly_swing_high_hit = True
                 break
+
+        if not weekly_swing_high_hit:
+            for swing_low in weekly.get('weekly_swing_lows', []):
+                if self._at_level(price, swing_low, tolerance):
+                    factors.append('Prev Week Swing Low')
+                    score += 2
+                    break
 
         if self._at_level(price, weekly.get('prev_week_vwap', 0), tolerance):
             factors.append('Prev Week VWAP')

@@ -428,7 +428,11 @@ class RecoveryManager:
 
     def calculate_breakeven_price(self, ticket: int) -> Optional[float]:
         """
-        Calculate breakeven price considering all grid/DCA levels
+        Calculate breakeven price considering all grid/DCA levels and hedges
+
+        NOTE: This calculates the breakeven for SAME-DIRECTION positions only.
+        Hedges (opposite direction) are not included in breakeven calculation
+        as they need to be closed separately.
 
         Args:
             ticket: Position ticket
@@ -444,15 +448,19 @@ class RecoveryManager:
         total_volume = position['initial_volume']
         weighted_price = position['entry_price'] * position['initial_volume']
 
-        # Add grid levels
+        # Add grid levels (same direction as original)
         for grid_level in position['grid_levels']:
             total_volume += grid_level['volume']
             weighted_price += grid_level['price'] * grid_level['volume']
 
-        # Add DCA levels
+        # Add DCA levels (same direction as original)
         for dca_level in position['dca_levels']:
             total_volume += dca_level['volume']
             weighted_price += dca_level['price'] * dca_level['volume']
+
+        # NOTE: Hedges are opposite direction and should be tracked separately
+        # They don't factor into the same-direction breakeven calculation
+        # The net P&L calculation in calculate_net_profit() handles the full picture
 
         if total_volume == 0:
             return None

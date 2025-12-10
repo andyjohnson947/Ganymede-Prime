@@ -4,6 +4,7 @@ Minimum confluence score: 4 (83.3% win rate at optimal score)
 """
 
 import pandas as pd
+import logging
 from typing import Dict, Optional, List
 from datetime import datetime
 
@@ -21,6 +22,9 @@ from config.strategy_config import (
     CANDLE_LOOKBACK,
     ALLOW_WEAK_TRENDS
 )
+
+# Create logger
+logger = logging.getLogger(__name__)
 
 
 class SignalDetector:
@@ -130,6 +134,15 @@ class SignalDetector:
         # 4. Determine if we should trade based on confluence
         signal['should_trade'] = signal['confluence_score'] >= MIN_CONFLUENCE_SCORE
 
+        # Log if confluence insufficient
+        if not signal['should_trade']:
+            logger.debug(
+                f"⏸️  Insufficient confluence | {symbol} | "
+                f"Score: {signal['confluence_score']}/{MIN_CONFLUENCE_SCORE} | "
+                f"Factors: {', '.join(signal['factors']) if signal['factors'] else 'None'} | "
+                f"Price: {price:.5f}"
+            )
+
         # 5. Apply trend filter (if enabled)
         if signal['should_trade'] and TREND_FILTER_ENABLED:
             # Calculate ADX
@@ -162,6 +175,16 @@ class SignalDetector:
             if not should_trade:
                 signal['should_trade'] = False
                 signal['reject_reason'] = trend_reason
+
+                # Log why signal was blocked - helps user understand bot is working
+                logger.info(
+                    f"⏸️  Signal BLOCKED by trend filter | {symbol} | "
+                    f"ADX: {adx_value:.1f} | Reason: {trend_reason} | "
+                    f"Confluence: {signal['confluence_score']} | "
+                    f"Factors: {', '.join(signal['factors'])} | "
+                    f"Price: {price:.5f}"
+                )
+
                 return None  # Reject signal due to trend filter
 
         # 6. Finalize direction if not set
@@ -171,6 +194,16 @@ class SignalDetector:
                 signal['direction'] = 'buy'  # Price below VWAP, buy for reversion
             else:
                 signal['direction'] = 'sell'  # Price above VWAP, sell for reversion
+
+        # Log successful signal
+        if signal['should_trade']:
+            logger.info(
+                f"✅ SIGNAL GENERATED | {symbol} | "
+                f"Direction: {signal['direction'].upper()} | "
+                f"Confluence: {signal['confluence_score']} | "
+                f"Factors: {', '.join(signal['factors'])} | "
+                f"Price: {price:.5f}"
+            )
 
         return signal if signal['should_trade'] else None
 

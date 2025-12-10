@@ -4,7 +4,6 @@ Minimum confluence score: 4 (83.3% win rate at optimal score)
 """
 
 import pandas as pd
-import logging
 from typing import Dict, Optional, List
 from datetime import datetime
 
@@ -12,6 +11,7 @@ from indicators.vwap import VWAP
 from indicators.volume_profile import VolumeProfile
 from indicators.htf_levels import HTFLevels
 from indicators.adx import calculate_adx, should_trade_based_on_trend
+from utils.logger import logger
 from config.strategy_config import (
     MIN_CONFLUENCE_SCORE,
     CONFLUENCE_WEIGHTS,
@@ -22,9 +22,6 @@ from config.strategy_config import (
     CANDLE_LOOKBACK,
     ALLOW_WEAK_TRENDS
 )
-
-# Create logger
-logger = logging.getLogger(__name__)
 
 
 class SignalDetector:
@@ -177,13 +174,22 @@ class SignalDetector:
                 signal['reject_reason'] = trend_reason
 
                 # Log why signal was blocked - helps user understand bot is working
-                logger.info(
+                block_msg = (
                     f"⏸️  Signal BLOCKED by trend filter | {symbol} | "
                     f"ADX: {adx_value:.1f} | Reason: {trend_reason} | "
                     f"Confluence: {signal['confluence_score']} | "
                     f"Factors: {', '.join(signal['factors'])} | "
                     f"Price: {price:.5f}"
                 )
+                logger.info(block_msg)
+
+                # Also log to signals.log
+                logger.log_signal({
+                    'symbol': symbol,
+                    'direction': 'BLOCKED',
+                    'confluence_score': signal['confluence_score'],
+                    'factors': signal['factors'] + [f"ADX={adx_value:.1f}", trend_reason]
+                })
 
                 return None  # Reject signal due to trend filter
 
@@ -197,13 +203,22 @@ class SignalDetector:
 
         # Log successful signal
         if signal['should_trade']:
-            logger.info(
+            success_msg = (
                 f"✅ SIGNAL GENERATED | {symbol} | "
                 f"Direction: {signal['direction'].upper()} | "
                 f"Confluence: {signal['confluence_score']} | "
                 f"Factors: {', '.join(signal['factors'])} | "
                 f"Price: {price:.5f}"
             )
+            logger.info(success_msg)
+
+            # Also log to signals.log
+            logger.log_signal({
+                'symbol': symbol,
+                'direction': signal['direction'],
+                'confluence_score': signal['confluence_score'],
+                'factors': signal['factors']
+            })
 
         return signal if signal['should_trade'] else None
 

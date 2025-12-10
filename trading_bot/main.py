@@ -15,6 +15,7 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
+# Import logger and other components
 from core.mt5_manager import MT5Manager
 from strategies.confluence_strategy import ConfluenceStrategy
 from utils.logger import logger

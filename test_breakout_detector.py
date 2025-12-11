@@ -120,9 +120,18 @@ def test_breakout_detector(login: int, password: str, server: str, symbol: str =
     vwap_calculator = VWAP()
     h1_df = vwap_calculator.calculate(h1_df)
 
-    # Volume Profile
+    # Volume Profile (adds columns to DataFrame)
     vp_calculator = VolumeProfile()
-    h1_df = vp_calculator.calculate(h1_df)
+    vp_data = vp_calculator.calculate(h1_df)
+
+    # Add volume profile data as columns to DataFrame
+    if vp_data and 'poc' in vp_data:
+        h1_df['volume_poc'] = vp_data['poc']
+        h1_df['volume_vah'] = vp_data['vah']
+        h1_df['volume_val'] = vp_data['val']
+        if 'lvn_price' in vp_data:
+            h1_df['lvn_price'] = vp_data['lvn_price']
+            h1_df['lvn_percentile'] = vp_data.get('lvn_percentile', 50)
 
     print("✅ Indicators calculated")
     print()

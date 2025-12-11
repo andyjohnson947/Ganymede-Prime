@@ -77,7 +77,10 @@ class VWAP:
             Series with VWAP standard deviation
         """
         typical_price = (df['high'] + df['low'] + df['close']) / 3
-        volume = df['volume']
+
+        # Determine volume column name (MT5 uses 'tick_volume')
+        volume_col = 'tick_volume' if 'tick_volume' in df.columns else 'volume'
+        volume = df[volume_col]
 
         # Rolling volume-weighted variance
         def weighted_std(prices, volumes):

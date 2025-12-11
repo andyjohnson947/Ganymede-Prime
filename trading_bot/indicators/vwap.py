@@ -7,7 +7,10 @@ import pandas as pd
 import numpy as np
 from typing import Tuple, Dict
 
-from trading_bot.config.strategy_config import VWAP_PERIOD, VWAP_BAND_MULTIPLIERS
+try:
+    from trading_bot.config.strategy_config import VWAP_PERIOD, VWAP_BAND_MULTIPLIERS
+except ModuleNotFoundError:
+    from config.strategy_config import VWAP_PERIOD, VWAP_BAND_MULTIPLIERS
 
 
 class VWAP:

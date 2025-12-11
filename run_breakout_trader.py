@@ -80,15 +80,33 @@ class BreakoutTrader:
         """Setup logging system"""
         log_file = self.log_dir / f"breakout_trader_{datetime.now().strftime('%Y%m%d')}.log"
 
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(levelname)s - %(message)s',
-            handlers=[
-                logging.FileHandler(log_file),
-                logging.StreamHandler()
-            ]
-        )
+        # File handler with UTF-8 encoding (supports emojis)
+        file_handler = logging.FileHandler(log_file, encoding='utf-8')
+        file_handler.setLevel(logging.INFO)
+
+        # Console handler with error handling for Windows
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.INFO)
+
+        # Try to set UTF-8 encoding for Windows console
+        try:
+            import sys
+            import io
+            if sys.platform == 'win32' and sys.stdout.encoding != 'utf-8':
+                sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+        except:
+            pass
+
+        # Formatter
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+        file_handler.setFormatter(formatter)
+        console_handler.setFormatter(formatter)
+
+        # Get logger and add handlers
         self.logger = logging.getLogger('BreakoutTrader')
+        self.logger.setLevel(logging.INFO)
+        self.logger.addHandler(file_handler)
+        self.logger.addHandler(console_handler)
 
     def check_configuration(self):
         """Check and display configuration"""

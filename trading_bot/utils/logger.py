@@ -27,14 +27,20 @@ class TradingLogger:
         log_dir = Path("logs")
         log_dir.mkdir(exist_ok=True)
 
-        # File handler
+        # File handler (UTF-8 encoding for emoji support on Windows)
         log_path = log_dir / LOG_FILE
-        file_handler = logging.FileHandler(log_path)
+        file_handler = logging.FileHandler(log_path, encoding='utf-8')
         file_handler.setLevel(logging.DEBUG)
 
-        # Console handler
+        # Console handler (ensure UTF-8 for emoji support)
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setLevel(getattr(logging, LOG_LEVEL))
+        # Force UTF-8 encoding for console (Windows compatibility)
+        if hasattr(sys.stdout, 'reconfigure'):
+            try:
+                sys.stdout.reconfigure(encoding='utf-8')
+            except Exception:
+                pass  # Ignore if reconfigure not available
 
         # Formatter
         formatter = logging.Formatter(
@@ -60,11 +66,11 @@ class TradingLogger:
             self.signal_logger = None
 
     def _create_file_logger(self, name: str, file_path: Path) -> logging.Logger:
-        """Create a separate file logger"""
+        """Create a separate file logger with UTF-8 encoding"""
         logger = logging.getLogger(name)
         logger.setLevel(logging.INFO)
 
-        handler = logging.FileHandler(file_path)
+        handler = logging.FileHandler(file_path, encoding='utf-8')
         handler.setLevel(logging.INFO)
 
         formatter = logging.Formatter(

@@ -8,7 +8,7 @@ import pandas as pd
 import numpy as np
 from typing import Dict, List, Tuple
 
-from config.strategy_config import (
+from trading_bot.config.strategy_config import (
     VP_BINS,
     HVN_LEVELS,
     LVN_LEVELS,

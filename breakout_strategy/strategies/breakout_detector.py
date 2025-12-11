@@ -109,6 +109,7 @@ class BreakoutDetector:
         # === 1. TREND FILTER (ADX) ===
         if 'adx' not in current_data.columns:
             current_data = calculate_adx(current_data, period=14)
+            latest = current_data.iloc[-1]  # Update latest after calculating ADX
 
         adx = latest['adx']
         plus_di = latest['plus_di']

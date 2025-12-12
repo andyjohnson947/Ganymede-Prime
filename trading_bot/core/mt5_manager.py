@@ -286,6 +286,8 @@ class MT5Manager:
 
         if result.retcode != mt5.TRADE_RETCODE_DONE:
             print(f"❌ Order failed: {result.comment}")
+            print(f"   Retcode: {result.retcode}")
+            print(f"   Request: {request}")
             return None
 
         print(f"✅ Order placed: {order_type.upper()} {volume} {symbol} @ {price}")

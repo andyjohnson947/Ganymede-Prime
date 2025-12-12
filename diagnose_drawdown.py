@@ -68,7 +68,8 @@ if positions:
         print(f"   Current: {pos.price_current:.5f}")
         print(f"   Profit: ${pos.profit:.2f}")
         print(f"   Swap: ${pos.swap:.2f}")
-        print(f"   Commission: ${pos.commission:.2f}")
+        if hasattr(pos, 'commission'):
+            print(f"   Commission: ${pos.commission:.2f}")
 
     print(f"\n   Total Unrealized P&L: ${total_profit:.2f}")
 else:

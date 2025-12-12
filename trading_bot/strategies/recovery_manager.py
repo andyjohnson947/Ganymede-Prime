@@ -152,12 +152,25 @@ class RecoveryManager:
         else:
             pips_moved = (current_price - entry_price) / pip_value
 
+        # 🔍 DIAGNOSTIC LOGGING
+        print(f"\n[GRID DIAGNOSTIC] Ticket: {ticket}")
+        print(f"  Entry: {entry_price:.5f} | Current: {current_price:.5f}")
+        print(f"  Pip value: {pip_value}")
+        print(f"  Price diff: {abs(current_price - entry_price):.5f}")
+        print(f"  Pips moved: {pips_moved:.2f}")
+        print(f"  Grid spacing: {GRID_SPACING_PIPS} pips")
+        print(f"  Current grid levels: {len(position['grid_levels'])}")
+
         # Check if underwater
         if pips_moved <= 0:
+            print(f"  ⏸️  Not underwater - no grid needed")
             return None
 
         # Calculate expected grid levels
         expected_levels = int(pips_moved / GRID_SPACING_PIPS) + 1
+
+        print(f"  Expected grid levels: {expected_levels}")
+        print(f"  Condition: {expected_levels} > {len(position['grid_levels'])} + 1 = {expected_levels > len(position['grid_levels']) + 1}")
 
         # Need to add grid level?
         if expected_levels > len(position['grid_levels']) + 1:  # +1 for original position
@@ -183,9 +196,12 @@ class RecoveryManager:
             position['total_volume'] += grid_volume
             position['recovery_active'] = True
 
-            print(f"🔹 Grid Level {len(position['grid_levels'])} triggered for {ticket}")
-            print(f"   Entry: {entry_price:.5f} → Grid: {grid_price:.5f}")
-            print(f"   Distance: {GRID_SPACING_PIPS * levels_added:.1f} pips")
+            print(f"\n  ✅ GRID TRIGGERED!")
+            print(f"  🔹 Grid Level {len(position['grid_levels'])} triggered for {ticket}")
+            print(f"     Entry: {entry_price:.5f} → Grid: {grid_price:.5f}")
+            print(f"     Distance: {GRID_SPACING_PIPS * levels_added:.1f} pips")
+            print(f"     Volume: {grid_volume}")
+            print(f"     Total grid levels now: {len(position['grid_levels'])}")
 
             return {
                 'action': 'grid',
@@ -234,6 +250,16 @@ class RecoveryManager:
         else:
             pips_underwater = (current_price - entry_price) / pip_value
 
+        # 🔍 DIAGNOSTIC LOGGING
+        print(f"\n[HEDGE DIAGNOSTIC] Ticket: {ticket}")
+        print(f"  Entry: {entry_price:.5f} | Current: {current_price:.5f}")
+        print(f"  Pip value: {pip_value}")
+        print(f"  Price diff: {abs(current_price - entry_price):.5f}")
+        print(f"  Pips underwater: {pips_underwater:.2f}")
+        print(f"  Hedge trigger: {HEDGE_TRIGGER_PIPS} pips")
+        print(f"  Current hedges: {len(position['hedge_tickets'])}/{MAX_HEDGES_PER_POSITION}")
+        print(f"  Condition: {pips_underwater:.2f} >= {HEDGE_TRIGGER_PIPS} = {pips_underwater >= HEDGE_TRIGGER_PIPS}")
+
         # Update max underwater
         if pips_underwater > position['max_underwater_pips']:
             position['max_underwater_pips'] = pips_underwater
@@ -260,10 +286,12 @@ class RecoveryManager:
 
             position['recovery_active'] = True
 
-            print(f"🛡️ Hedge activated for {ticket}")
-            print(f"   Original: {position_type.upper()} {position['initial_volume']:.2f} (total exposure: {position['total_volume']:.2f})")
-            print(f"   Hedge: {hedge_type.upper()} {hedge_volume:.2f} (ratio: {HEDGE_RATIO}x on initial)")
-            print(f"   Triggered at: {pips_underwater:.1f} pips underwater")
+            print(f"\n  ✅ HEDGE TRIGGERED!")
+            print(f"  🛡️ Hedge activated for {ticket}")
+            print(f"     Original: {position_type.upper()} {position['initial_volume']:.2f} (total exposure: {position['total_volume']:.2f})")
+            print(f"     Hedge: {hedge_type.upper()} {hedge_volume:.2f} (ratio: {HEDGE_RATIO}x on initial)")
+            print(f"     Triggered at: {pips_underwater:.1f} pips underwater")
+            print(f"     Total hedges now: {len(position['hedge_tickets'])}")
 
             return {
                 'action': 'hedge',

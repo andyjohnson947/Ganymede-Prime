@@ -209,7 +209,21 @@ class ConfluenceStrategy:
             if ticket in self.recovery_manager.tracked_positions:
                 current_price = position['price_current']
                 symbol_info = self.mt5.get_symbol_info(symbol)
-                pip_value = symbol_info.get('point', 0.0001)
+
+                # Calculate proper pip value (not point!)
+                # For most forex pairs: pip = point * 10 (5 decimal vs 4 decimal)
+                # For JPY pairs: pip = point * 100 (3 decimal vs 2 decimal)
+                point = symbol_info.get('point', 0.00001)
+                digits = symbol_info.get('digits', 5)
+
+                # Standard forex pairs (5 digits): 1 pip = 10 points
+                # JPY pairs (3 digits): 1 pip = 100 points
+                if digits == 5 or digits == 3:
+                    pip_value = point * 10
+                else:
+                    pip_value = point
+
+                print(f"[PIP DEBUG] {symbol}: point={point}, digits={digits}, pip_value={pip_value}")
 
                 recovery_actions = self.recovery_manager.check_all_recovery_triggers(
                     ticket, current_price, pip_value

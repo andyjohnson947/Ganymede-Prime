@@ -73,13 +73,15 @@ class ConfluenceStrategy:
             return
 
         print(f"Account Balance: ${account_info['balance']:.2f}")
+        print(f"Account Equity: ${account_info['equity']:.2f}")
         print(f"Symbols: {', '.join(symbols)}")
         print(f"Timeframe: {TIMEFRAME}")
         print(f"HTF: {', '.join(HTF_TIMEFRAMES)}")
         print()
 
-        # Set initial balance for drawdown tracking
-        self.risk_calculator.set_initial_balance(account_info['balance'])
+        # Set initial equity (not balance) for drawdown tracking
+        # This ensures existing unrealized P&L doesn't count as "new" drawdown
+        self.risk_calculator.set_initial_balance(account_info['equity'])
 
         self.running = True
 

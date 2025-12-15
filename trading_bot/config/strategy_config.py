@@ -205,9 +205,9 @@ PARTIAL_CLOSE_ENABLED = True  # Set to True to enable partial profit-taking
 # Partial close levels - close portions of stack at profit milestones
 # Each level specifies: trigger_percent (% of target profit) and close_percent (% of stack to close)
 PARTIAL_CLOSE_LEVELS = [
-    {'trigger_percent': 50, 'close_percent': 50},  # At 50% profit ($5), close 50% of stack
-    {'trigger_percent': 75, 'close_percent': 30},  # At 75% profit ($7.50), close 30% more
-    # Remaining 20% stays open until 100% target ($10) or time limit
+    {'trigger_percent': 50, 'close_percent': 50},  # At 50% profit ($5), close 50% of stack (0.04 lots)
+    {'trigger_percent': 75, 'close_percent': 25},  # At 75% profit ($7.50), close 25% more (0.02 lots)
+    # Remaining 25% (0.02 lots) stays open until 100% target ($10) or time limit
 ]
 
 # Example configurations for different strategies:

@@ -295,12 +295,13 @@ class MT5Manager:
 
         return result.order
 
-    def close_position(self, ticket: int) -> bool:
+    def close_position(self, ticket: int, volume: Optional[float] = None) -> bool:
         """
-        Close an open position
+        Close an open position (full or partial)
 
         Args:
             ticket: Position ticket number
+            volume: Volume to close (None = close entire position)
 
         Returns:
             bool: True if closed successfully
@@ -319,7 +320,15 @@ class MT5Manager:
 
         # Prepare close request
         symbol = position.symbol
-        volume = position.volume
+        position_volume = position.volume
+
+        # Determine volume to close
+        if volume is None or volume >= position_volume:
+            close_volume = position_volume  # Close entire position
+            partial_close = False
+        else:
+            close_volume = volume  # Partial close
+            partial_close = True
 
         # Get symbol info to determine filling mode
         symbol_info = mt5.symbol_info(symbol)
@@ -341,13 +350,13 @@ class MT5Manager:
         request = {
             "action": mt5.TRADE_ACTION_DEAL,
             "symbol": symbol,
-            "volume": volume,
+            "volume": close_volume,
             "type": order_type,
             "position": ticket,
             "price": price,
             "deviation": 20,
             "magic": self.magic_number,
-            "comment": "Close by bot",
+            "comment": f"Partial close {close_volume}" if partial_close else "Close by bot",
             "type_time": mt5.ORDER_TIME_GTC,
             "type_filling": filling_type,
         }
@@ -362,7 +371,11 @@ class MT5Manager:
             print(f"❌ Close failed: {result.comment}")
             return False
 
-        print(f"✅ Position closed: {ticket}")
+        if partial_close:
+            remaining = position_volume - close_volume
+            print(f"✅ Position partially closed: {ticket} ({close_volume}/{position_volume} lots, {remaining} remaining)")
+        else:
+            print(f"✅ Position closed: {ticket}")
         return True
 
     def modify_position(

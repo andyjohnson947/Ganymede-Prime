@@ -705,7 +705,7 @@ class RecoveryManager:
         close_percent: float,
         mt5_positions: List[Dict],
         close_order: str = 'recovery_first'
-    ) -> List[int]:
+    ) -> List[Dict]:
         """
         Determine which positions to close for partial close
 
@@ -716,7 +716,7 @@ class RecoveryManager:
             close_order: 'recovery_first', 'lifo', 'fifo', or 'largest_first'
 
         Returns:
-            List of ticket numbers to close
+            List of dicts with 'ticket', 'volume', and 'partial' keys
         """
         if ticket not in self.tracked_positions:
             return []
@@ -770,17 +770,34 @@ class RecoveryManager:
             stack_positions.sort(key=lambda p: p['volume'], reverse=True)
 
         # Select positions to close until we reach target volume
-        tickets_to_close = []
-        volume_to_close = 0.0
+        positions_to_close = []
+        volume_accumulated = 0.0
 
         for pos in stack_positions:
-            if volume_to_close >= target_close_volume:
+            if volume_accumulated >= target_close_volume:
                 break
 
-            tickets_to_close.append(pos['ticket'])
-            volume_to_close += pos['volume']
+            remaining_needed = target_close_volume - volume_accumulated
 
-        return tickets_to_close
+            if pos['volume'] <= remaining_needed:
+                # Close entire position
+                positions_to_close.append({
+                    'ticket': pos['ticket'],
+                    'volume': pos['volume'],  # Close full volume
+                    'partial': False
+                })
+                volume_accumulated += pos['volume']
+            else:
+                # Close partial volume of this position
+                positions_to_close.append({
+                    'ticket': pos['ticket'],
+                    'volume': remaining_needed,  # Close only what's needed
+                    'partial': True
+                })
+                volume_accumulated += remaining_needed
+                break  # We've reached target
+
+        return positions_to_close
 
     def record_partial_close(
         self,

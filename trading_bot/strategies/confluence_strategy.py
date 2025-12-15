@@ -13,6 +13,7 @@ from strategies.signal_detector import SignalDetector
 from strategies.recovery_manager import RecoveryManager
 from utils.risk_calculator import RiskCalculator
 from utils.config_reloader import reload_config, print_current_config
+from utils.position_reporter import PositionStatusReporter
 from config.strategy_config import (
     SYMBOLS,
     TIMEFRAME,
@@ -22,6 +23,12 @@ from config.strategy_config import (
     MAX_POSITIONS_PER_SYMBOL,
     PROFIT_TARGET_PERCENT,
     MAX_POSITION_HOURS,
+    STATUS_REPORT_ENABLED,
+    STATUS_REPORT_INTERVAL,
+    LOG_RECOVERY_ACTIONS,
+    LOG_EXIT_PROXIMITY,
+    EXIT_PROXIMITY_PERCENT,
+    CONCISE_FORMAT,
 )
 
 
@@ -39,6 +46,7 @@ class ConfluenceStrategy:
         self.signal_detector = SignalDetector()
         self.recovery_manager = RecoveryManager()
         self.risk_calculator = RiskCalculator()
+        self.position_reporter = PositionStatusReporter()
 
         self.running = False
         self.last_data_refresh = {}
@@ -135,6 +143,10 @@ class ConfluenceStrategy:
             except Exception as e:
                 print(f"❌ Error processing {symbol}: {e}")
                 continue
+
+        # 4. Generate periodic status report (after processing all symbols)
+        if STATUS_REPORT_ENABLED and self.position_reporter.should_report(STATUS_REPORT_INTERVAL):
+            self._print_status_report()
 
     def _refresh_market_data(self, symbol: str):
         """Refresh market data for symbol if needed"""
@@ -427,6 +439,52 @@ class ConfluenceStrategy:
                 self.stats['hedges_activated'] += 1
             elif action_type == 'dca':
                 self.stats['dca_levels_added'] += 1
+
+            # Log recovery action (if enabled)
+            if LOG_RECOVERY_ACTIONS:
+                recovery_msg = self.position_reporter.format_recovery_action(
+                    action_type=action_type,
+                    ticket=original_ticket,
+                    details=action
+                )
+                print(recovery_msg)
+
+    def _print_status_report(self):
+        """Print periodic status report for all positions"""
+        try:
+            # Get all positions and account info
+            all_positions = self.mt5.get_positions()
+            account_info = self.mt5.get_account_info()
+
+            if not all_positions or not account_info:
+                return
+
+            # Generate and print report
+            report = self.position_reporter.generate_status_report(
+                positions=all_positions,
+                recovery_manager=self.recovery_manager,
+                account_info=account_info,
+                profit_target_percent=PROFIT_TARGET_PERCENT,
+                max_hold_hours=MAX_POSITION_HOURS,
+                concise=CONCISE_FORMAT
+            )
+
+            print(report)
+
+            # Check for exit proximity alerts (if enabled)
+            if LOG_EXIT_PROXIMITY:
+                for position in all_positions:
+                    alert = self.position_reporter.check_exit_proximity(
+                        position=position,
+                        account_balance=account_info['balance'],
+                        profit_target_percent=PROFIT_TARGET_PERCENT,
+                        proximity_threshold=EXIT_PROXIMITY_PERCENT
+                    )
+                    if alert:
+                        print(alert)
+
+        except Exception as e:
+            print(f"❌ Error generating status report: {e}")
 
     def _can_open_new_position(self, symbol: str) -> bool:
         """Check if we can open a new position"""

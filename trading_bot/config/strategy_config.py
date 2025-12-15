@@ -218,6 +218,14 @@ LOG_FILE = 'trading_bot.log'
 LOG_TRADES = True
 LOG_SIGNALS = True
 
+# Enhanced Position Status Logging
+STATUS_REPORT_ENABLED = True
+STATUS_REPORT_INTERVAL = 30  # Minutes between status reports
+LOG_RECOVERY_ACTIONS = True  # Log when grid/hedge/DCA levels are added
+LOG_EXIT_PROXIMITY = True    # Alert when approaching profit targets
+EXIT_PROXIMITY_PERCENT = 90  # Alert when this % of target reached
+CONCISE_FORMAT = True        # Use 3-5 lines per position (vs detailed)
+
 # =============================================================================
 # BACKTESTING
 # =============================================================================

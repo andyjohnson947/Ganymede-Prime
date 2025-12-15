@@ -108,7 +108,7 @@ SKIP_STRONG_TRENDS = True  # Never trade when ADX > 40
 GRID_ENABLED = True
 GRID_SPACING_PIPS = 8  # Tighter spacing: Trigger every 8 pips (was 10.8)
 MAX_GRID_LEVELS = 4  # More levels: Maximum 4 grid levels (was 2)
-GRID_LOT_SIZE = 0.03  # Stronger grid: 0.03 per level (was 0.01)
+GRID_LOT_SIZE = 0.05  # Stronger grid: 0.05 per level (increased from 0.03)
 
 # =============================================================================
 # HEDGING PARAMETERS (AGGRESSIVE RECOVERY SETTINGS)
@@ -138,7 +138,7 @@ DCA_MAX_TOTAL_EXPOSURE = 0.5  # SAFETY: Maximum total lots across all DCA levels
 # =============================================================================
 
 # Base lot size for initial positions
-BASE_LOT_SIZE = 0.03  # Increased from 0.01 to 0.03
+BASE_LOT_SIZE = 0.05  # Increased from 0.03 to 0.05 for faster $10 target
 
 # Risk per trade (if using dynamic position sizing)
 RISK_PERCENT = 1.0

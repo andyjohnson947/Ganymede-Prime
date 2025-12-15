@@ -189,7 +189,7 @@ MAX_POSITIONS_PER_SYMBOL = 1  # Only 1 position per symbol at a time
 
 # Net profit target for recovery stacks
 # Close entire stack (original + grid + hedge + DCA) when combined P&L reaches this
-PROFIT_TARGET_PERCENT = 0.5  # AGGRESSIVE: 0.5% target (easier to hit with larger lots)
+PROFIT_TARGET_PERCENT = 1.0  # Target: ~$10 per trade at $1,023 account (1% of balance)
 
 # Time-based exit for stuck positions
 # Auto-close recovery stack after this many hours if still open

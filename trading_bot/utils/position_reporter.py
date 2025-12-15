@@ -36,7 +36,7 @@ class PositionStatusReporter:
 
         Args:
             position: Position dict from MT5
-            recovery_status: Recovery status from RecoveryManager
+            recovery_status: Recovery status from RecoveryManager (from tracked_positions)
             account_balance: Account balance for profit calculation
             profit_target_percent: Profit target percentage
             max_hold_hours: Maximum hold time in hours
@@ -71,7 +71,7 @@ class PositionStatusReporter:
         profit_target = account_balance * (profit_target_percent / 100)
         profit_percent = (profit / profit_target * 100) if profit_target > 0 else 0
 
-        # Recovery info
+        # Recovery info - recovery_status is the actual tracked position data
         grid_levels = len(recovery_status.get('grid_levels', []))
         hedge_count = len(recovery_status.get('hedge_tickets', []))
         dca_levels = len(recovery_status.get('dca_levels', []))
@@ -254,9 +254,10 @@ class PositionStatusReporter:
         └─ 🛡️  Hedge: #5963831502 (0.15 lots @ 1.17396)
         """
         ticket = parent_position['ticket']
-        recovery_status = recovery_manager.get_position_status(ticket)
+        # Get actual tracked position data (not summary)
+        tracked_pos = recovery_manager.tracked_positions.get(ticket)
 
-        if not recovery_status:
+        if not tracked_pos:
             return f"📊 #{ticket} - NOT MANAGED ⚠️"
 
         tree = f"📊 #{ticket} ({parent_position['symbol']} {parent_position['type'].upper()}) - PARENT"
@@ -265,10 +266,13 @@ class PositionStatusReporter:
         mt5_lookup = {p['ticket']: p for p in all_mt5_positions}
 
         # Grid levels
-        grid_levels = recovery_status.get('grid_levels', [])
+        grid_levels = tracked_pos.get('grid_levels', [])
+        hedge_tickets = tracked_pos.get('hedge_tickets', [])
+        dca_levels = tracked_pos.get('dca_levels', [])
+
         for i, grid in enumerate(grid_levels):
             grid_ticket = grid.get('ticket')
-            is_last_grid = (i == len(grid_levels) - 1) and not recovery_status.get('hedge_tickets') and not recovery_status.get('dca_levels')
+            is_last_grid = (i == len(grid_levels) - 1) and not hedge_tickets and not dca_levels
             prefix = "└─" if is_last_grid else "├─"
 
             if grid_ticket and grid_ticket in mt5_lookup:
@@ -282,10 +286,9 @@ class PositionStatusReporter:
             tree += f"\n{prefix} 🔹 Grid L{i+1}: #{grid_ticket} ({grid['volume']:.2f} lots @ {price:.5f}) {status}"
 
         # Hedge trades
-        hedge_tickets = recovery_status.get('hedge_tickets', [])
         for i, hedge in enumerate(hedge_tickets):
             hedge_ticket = hedge.get('ticket')
-            is_last_hedge = (i == len(hedge_tickets) - 1) and not recovery_status.get('dca_levels')
+            is_last_hedge = (i == len(hedge_tickets) - 1) and not dca_levels
             prefix = "└─" if is_last_hedge else "├─"
 
             if hedge_ticket and hedge_ticket in mt5_lookup:
@@ -301,7 +304,6 @@ class PositionStatusReporter:
             tree += f"\n{prefix} 🛡️  Hedge: #{hedge_ticket} ({volume:.2f} lots @ {price:.5f}) {status}"
 
         # DCA levels
-        dca_levels = recovery_status.get('dca_levels', [])
         for i, dca in enumerate(dca_levels):
             dca_ticket = dca.get('ticket')
             is_last = (i == len(dca_levels) - 1)
@@ -368,13 +370,14 @@ class PositionStatusReporter:
 
             for position in orphan_analysis['managed']:
                 ticket = position['ticket']
-                recovery_status = recovery_manager.get_position_status(ticket)
+                # Get actual tracked position data (not summary)
+                tracked_pos = recovery_manager.tracked_positions.get(ticket)
 
-                if recovery_status:
-                    # Standard position summary
+                if tracked_pos:
+                    # Standard position summary (pass tracked position data directly)
                     summary = self.generate_position_summary(
                         position=position,
-                        recovery_status=recovery_status,
+                        recovery_status=tracked_pos,  # Pass full tracked data, not summary
                         account_balance=account_info.get('balance', 10000),
                         profit_target_percent=profit_target_percent,
                         max_hold_hours=max_hold_hours,

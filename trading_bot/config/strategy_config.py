@@ -238,6 +238,48 @@ BACKTEST_END_DATE = '2024-12-31'
 BACKTEST_INITIAL_BALANCE = 10000
 
 # =============================================================================
+# SCALPING STRATEGY PARAMETERS
+# =============================================================================
+
+# Enable/disable scalping module
+SCALPING_ENABLED = False  # Set to True to activate scalping alongside confluence strategy
+
+# Scalping timeframe (M1 = 1 minute, M5 = 5 minutes)
+SCALP_TIMEFRAME = 'M1'  # Fast scalping on 1-minute charts
+
+# Scalping lot size (smaller than base for lower risk)
+SCALP_LOT_SIZE = 0.01  # Conservative 0.01 lots per scalp
+
+# Position limits
+SCALP_MAX_POSITIONS = 3  # Maximum concurrent scalping positions
+SCALP_MAX_POSITIONS_PER_SYMBOL = 1  # Only 1 scalp per symbol at a time
+
+# Signal detection parameters
+SCALP_MOMENTUM_PERIOD = 14  # RSI and Stochastic period
+SCALP_VOLUME_SPIKE_THRESHOLD = 1.5  # Volume must be 1.5x average for spike
+SCALP_BREAKOUT_LOOKBACK = 20  # Bars to look back for breakout levels
+SCALP_BARS_TO_FETCH = 100  # Historical bars to analyze
+
+# Exit management
+SCALP_MAX_HOLD_MINUTES = 10  # Force close after 10 minutes (scalps should be fast)
+SCALP_USE_TRAILING_STOP = True  # Enable trailing stop for profitable scalps
+SCALP_TRAILING_STOP_PIPS = 5  # Trail stop at 5 pips
+
+# Trading sessions (scalping works best during high volatility)
+SCALP_TRADING_SESSIONS = {
+    'london': {'start': '08:00', 'end': '12:00', 'enabled': True},  # London open
+    'new_york': {'start': '13:00', 'end': '17:00', 'enabled': True},  # NY open
+    'overlap': {'start': '13:00', 'end': '16:00', 'enabled': True},  # London/NY overlap (best)
+}
+
+# Check interval (how often to scan for signals)
+SCALP_CHECK_INTERVAL_SECONDS = 10  # Check every 10 seconds for M1
+
+# Risk-reward ratio (built into signal detector: 2:1 default)
+# Stop loss: 5-8 pips based on recent swing
+# Take profit: 10-16 pips (2x the stop loss)
+
+# =============================================================================
 # MT5 CONNECTION
 # =============================================================================
 

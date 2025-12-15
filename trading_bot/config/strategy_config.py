@@ -138,7 +138,7 @@ DCA_MAX_TOTAL_EXPOSURE = 0.5  # SAFETY: Maximum total lots across all DCA levels
 # =============================================================================
 
 # Base lot size for initial positions
-BASE_LOT_SIZE = 0.05  # Increased from 0.03 to 0.05 for faster $10 target
+BASE_LOT_SIZE = 0.08  # Optimized for partial closes: 50% = 0.04, 30% = 0.024, 20% = 0.016
 
 # Risk per trade (if using dynamic position sizing)
 RISK_PERCENT = 1.0

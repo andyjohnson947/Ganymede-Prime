@@ -29,7 +29,9 @@ class PositionStatusReporter:
         account_balance: float,
         profit_target_percent: float,
         max_hold_hours: int,
-        concise: bool = True
+        concise: bool = True,
+        all_positions: List[Dict] = None,
+        recovery_manager = None
     ) -> str:
         """
         Generate human-readable summary for a single position
@@ -78,6 +80,16 @@ class PositionStatusReporter:
         hedge_count = len(recovery_status.get('hedge_tickets', []))
         dca_levels = len(recovery_status.get('dca_levels', []))
 
+        # Calculate stack total P&L if recovery trades exist
+        stack_total = None
+        recovery_pnl = 0.0
+        has_recovery = (grid_levels > 0 or hedge_count > 0 or dca_levels > 0)
+
+        if has_recovery and all_positions and recovery_manager:
+            stack_total = recovery_manager.calculate_net_profit(ticket, all_positions)
+            if stack_total is not None:
+                recovery_pnl = stack_total - profit
+
         # Time remaining
         time_remaining = max_hold_hours * 3600 - age.total_seconds()
         time_remaining_str = self._format_seconds(time_remaining) if time_remaining > 0 else "EXPIRED"
@@ -100,16 +112,30 @@ class PositionStatusReporter:
             if recovery_parts:
                 summary += f"\n   Recovery: {' | '.join(recovery_parts)}"
 
+            # Show stack total if recovery trades exist
+            if stack_total is not None:
+                summary += f"\n   [STACK TOTAL] ${stack_total:+.2f} (Parent ${profit:+.2f} + Recovery ${recovery_pnl:+.2f})"
+                # Use stack total for target calculation instead of individual position
+                stack_profit_percent = (stack_total / profit_target * 100) if profit_target > 0 else 0
+            else:
+                stack_profit_percent = profit_percent
+
             # Exit status (one line)
             exit_parts = []
             if profit_target > 0:
-                exit_parts.append(f"Target:{profit_percent:.0f}% (${profit:.2f}/${profit_target:.2f})")
+                # Use stack total percentage if available, otherwise individual position percentage
+                display_percent = stack_profit_percent if stack_total is not None else profit_percent
+                display_profit = stack_total if stack_total is not None else profit
+                exit_parts.append(f"Target:{display_percent:.0f}% (${display_profit:+.2f}/${profit_target:.2f})")
             exit_parts.append(f"Time:{time_remaining_str}")
 
-            # Status indicator
-            if profit_percent >= 90:
+            # Status indicator (use stack total if available)
+            check_profit = stack_total if stack_total is not None else profit
+            check_percent = stack_profit_percent if stack_total is not None else profit_percent
+
+            if check_percent >= 90:
                 status = "[CLOSE SOON]"
-            elif profit >= 0:
+            elif check_profit >= 0:
                 status = "[PROFIT]"
             else:
                 status = f"[UNDERWATER {abs(pips):.1f} pips]"
@@ -383,7 +409,9 @@ class PositionStatusReporter:
                         account_balance=account_info.get('balance', 10000),
                         profit_target_percent=profit_target_percent,
                         max_hold_hours=max_hold_hours,
-                        concise=concise
+                        concise=concise,
+                        all_positions=positions,  # Pass all positions for stack calculation
+                        recovery_manager=recovery_manager  # Pass recovery manager
                     )
                     report += summary
 

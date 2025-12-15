@@ -225,6 +225,8 @@ LOG_RECOVERY_ACTIONS = True  # Log when grid/hedge/DCA levels are added
 LOG_EXIT_PROXIMITY = True    # Alert when approaching profit targets
 EXIT_PROXIMITY_PERCENT = 90  # Alert when this % of target reached
 CONCISE_FORMAT = True        # Use 3-5 lines per position (vs detailed)
+SHOW_MANAGEMENT_TREE = False # Show parent-child recovery trade tree (verbose, use when debugging)
+DETECT_ORPHANS = True        # Check for orphaned positions/recovery trades in status reports
 
 # =============================================================================
 # BACKTESTING

@@ -29,6 +29,8 @@ from config.strategy_config import (
     LOG_EXIT_PROXIMITY,
     EXIT_PROXIMITY_PERCENT,
     CONCISE_FORMAT,
+    SHOW_MANAGEMENT_TREE,
+    DETECT_ORPHANS,
 )
 
 
@@ -470,6 +472,26 @@ class ConfluenceStrategy:
             )
 
             print(report)
+
+            # Show management tree if enabled (shows parent-child relationships)
+            if SHOW_MANAGEMENT_TREE:
+                print("\n" + "─"*80)
+                print("🌳 POSITION MANAGEMENT TREES")
+                print("─"*80)
+
+                # Get tracked positions (managed positions)
+                tracked_tickets = set(self.recovery_manager.tracked_positions.keys())
+
+                for position in all_positions:
+                    if position['ticket'] in tracked_tickets:
+                        tree = self.position_reporter.generate_management_tree(
+                            parent_position=position,
+                            recovery_manager=self.recovery_manager,
+                            all_mt5_positions=all_positions
+                        )
+                        print(f"\n{tree}")
+
+                print("─"*80)
 
             # Check for exit proximity alerts (if enabled)
             if LOG_EXIT_PROXIMITY:

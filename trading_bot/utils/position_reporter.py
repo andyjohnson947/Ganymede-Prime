@@ -146,6 +146,181 @@ class PositionStatusReporter:
 
         return summary
 
+    def detect_orphaned_positions(
+        self,
+        mt5_positions: List[Dict],
+        recovery_manager
+    ) -> Dict:
+        """
+        Detect orphaned positions and recovery trades
+
+        Returns dict with:
+            - orphaned_parent: Positions in MT5 but not tracked by recovery manager
+            - orphaned_recovery: Recovery trades with no parent position
+            - managed: Positions properly tracked
+        """
+        tracked_tickets = set(recovery_manager.tracked_positions.keys())
+        mt5_tickets = {p['ticket'] for p in mt5_positions}
+
+        # Get all recovery trade tickets from tracked positions
+        recovery_tickets = set()
+        parent_map = {}  # Maps recovery ticket to parent ticket
+
+        for ticket, pos_data in recovery_manager.tracked_positions.items():
+            # Grid tickets
+            for grid in pos_data.get('grid_levels', []):
+                if 'ticket' in grid and grid['ticket']:
+                    recovery_tickets.add(grid['ticket'])
+                    parent_map[grid['ticket']] = ticket
+
+            # Hedge tickets
+            for hedge in pos_data.get('hedge_tickets', []):
+                if 'ticket' in hedge and hedge['ticket']:
+                    recovery_tickets.add(hedge['ticket'])
+                    parent_map[hedge['ticket']] = ticket
+
+            # DCA tickets
+            for dca in pos_data.get('dca_levels', []):
+                if 'ticket' in dca and dca['ticket']:
+                    recovery_tickets.add(dca['ticket'])
+                    parent_map[dca['ticket']] = ticket
+
+        # Orphaned parent positions: In MT5 but not tracked
+        # Exclude recovery trades from orphan check
+        orphaned_parent = []
+        for pos in mt5_positions:
+            ticket = pos['ticket']
+            if ticket not in tracked_tickets and ticket not in recovery_tickets:
+                orphaned_parent.append(pos)
+
+        # Orphaned recovery trades: Parent position closed but recovery trade still open
+        orphaned_recovery = []
+        for pos in mt5_positions:
+            ticket = pos['ticket']
+            if ticket in recovery_tickets:
+                parent_ticket = parent_map.get(ticket)
+                # Check if parent is still open in MT5
+                if parent_ticket not in mt5_tickets:
+                    orphaned_recovery.append({
+                        'position': pos,
+                        'parent_ticket': parent_ticket,
+                        'recovery_type': self._get_recovery_type(ticket, parent_ticket, recovery_manager)
+                    })
+
+        # Properly managed positions
+        managed = [pos for pos in mt5_positions if pos['ticket'] in tracked_tickets]
+
+        return {
+            'orphaned_parent': orphaned_parent,
+            'orphaned_recovery': orphaned_recovery,
+            'managed': managed,
+            'parent_map': parent_map
+        }
+
+    def _get_recovery_type(self, ticket: int, parent_ticket: int, recovery_manager) -> str:
+        """Determine if recovery trade is Grid, Hedge, or DCA"""
+        if parent_ticket not in recovery_manager.tracked_positions:
+            return "Unknown"
+
+        pos_data = recovery_manager.tracked_positions[parent_ticket]
+
+        for grid in pos_data.get('grid_levels', []):
+            if grid.get('ticket') == ticket:
+                return "Grid"
+
+        for hedge in pos_data.get('hedge_tickets', []):
+            if hedge.get('ticket') == ticket:
+                return "Hedge"
+
+        for dca in pos_data.get('dca_levels', []):
+            if dca.get('ticket') == ticket:
+                return "DCA"
+
+        return "Unknown"
+
+    def generate_management_tree(
+        self,
+        parent_position: Dict,
+        recovery_manager,
+        all_mt5_positions: List[Dict]
+    ) -> str:
+        """
+        Generate visual tree showing parent position and all recovery trades
+
+        Example output:
+        📊 #5963831212 (EURUSD SELL) - PARENT
+        ├─ 🔹 Grid L1: #5963831300 (0.03 lots @ 1.17396)
+        ├─ 🔹 Grid L2: #5963831401 (0.03 lots @ 1.17476)
+        └─ 🛡️  Hedge: #5963831502 (0.15 lots @ 1.17396)
+        """
+        ticket = parent_position['ticket']
+        recovery_status = recovery_manager.get_position_status(ticket)
+
+        if not recovery_status:
+            return f"📊 #{ticket} - NOT MANAGED ⚠️"
+
+        tree = f"📊 #{ticket} ({parent_position['symbol']} {parent_position['type'].upper()}) - PARENT"
+
+        # Create MT5 position lookup
+        mt5_lookup = {p['ticket']: p for p in all_mt5_positions}
+
+        # Grid levels
+        grid_levels = recovery_status.get('grid_levels', [])
+        for i, grid in enumerate(grid_levels):
+            grid_ticket = grid.get('ticket')
+            is_last_grid = (i == len(grid_levels) - 1) and not recovery_status.get('hedge_tickets') and not recovery_status.get('dca_levels')
+            prefix = "└─" if is_last_grid else "├─"
+
+            if grid_ticket and grid_ticket in mt5_lookup:
+                mt5_pos = mt5_lookup[grid_ticket]
+                status = "✅ OPEN"
+                price = mt5_pos['price_current']
+            else:
+                status = "❌ CLOSED"
+                price = grid.get('price', 0)
+
+            tree += f"\n{prefix} 🔹 Grid L{i+1}: #{grid_ticket} ({grid['volume']:.2f} lots @ {price:.5f}) {status}"
+
+        # Hedge trades
+        hedge_tickets = recovery_status.get('hedge_tickets', [])
+        for i, hedge in enumerate(hedge_tickets):
+            hedge_ticket = hedge.get('ticket')
+            is_last_hedge = (i == len(hedge_tickets) - 1) and not recovery_status.get('dca_levels')
+            prefix = "└─" if is_last_hedge else "├─"
+
+            if hedge_ticket and hedge_ticket in mt5_lookup:
+                mt5_pos = mt5_lookup[hedge_ticket]
+                status = "✅ OPEN"
+                volume = mt5_pos.get('volume', hedge.get('volume', 0))
+                price = mt5_pos['price_current']
+            else:
+                status = "❌ CLOSED"
+                volume = hedge.get('volume', 0)
+                price = hedge.get('price', 0)
+
+            tree += f"\n{prefix} 🛡️  Hedge: #{hedge_ticket} ({volume:.2f} lots @ {price:.5f}) {status}"
+
+        # DCA levels
+        dca_levels = recovery_status.get('dca_levels', [])
+        for i, dca in enumerate(dca_levels):
+            dca_ticket = dca.get('ticket')
+            is_last = (i == len(dca_levels) - 1)
+            prefix = "└─" if is_last else "├─"
+
+            if dca_ticket and dca_ticket in mt5_lookup:
+                mt5_pos = mt5_lookup[dca_ticket]
+                status = "✅ OPEN"
+                volume = mt5_pos.get('volume', dca.get('volume', 0))
+                price = mt5_pos['price_current']
+            else:
+                status = "❌ CLOSED"
+                volume = dca.get('volume', 0)
+                price = dca.get('price', 0)
+
+            tree += f"\n{prefix} 💰 DCA L{i+1}: #{dca_ticket} ({volume:.2f} lots @ {price:.5f}) {status}"
+
+        return tree
+
     def generate_status_report(
         self,
         positions: List[Dict],
@@ -158,11 +333,19 @@ class PositionStatusReporter:
         """
         Generate complete status report for all positions
 
+        Now includes:
+        - Orphan detection
+        - Management tree showing parent-child relationships
+        - Clear warnings for unmanaged positions
+
         Returns:
             Formatted status report string
         """
         if not positions:
             return "\n📊 STATUS REPORT: No open positions"
+
+        # Detect orphaned positions
+        orphan_analysis = self.detect_orphaned_positions(positions, recovery_manager)
 
         report = "\n" + "="*80
         report += f"\n📊 POSITION STATUS REPORT - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
@@ -170,23 +353,67 @@ class PositionStatusReporter:
 
         # Overall stats
         total_pnl = sum(p.get('profit', 0) for p in positions)
-        report += f"\n📈 {len(positions)} position(s) | Total P&L: ${total_pnl:+.2f}"
+        managed_count = len(orphan_analysis['managed'])
+        orphan_parent_count = len(orphan_analysis['orphaned_parent'])
+        orphan_recovery_count = len(orphan_analysis['orphaned_recovery'])
 
-        # Individual positions
-        for position in positions:
-            ticket = position['ticket']
-            recovery_status = recovery_manager.get_position_status(ticket)
+        report += f"\n📈 {len(positions)} total position(s) | Total P&L: ${total_pnl:+.2f}"
+        report += f"\n   ✅ Managed: {managed_count} | ⚠️  Orphaned Parents: {orphan_parent_count} | ⚠️  Orphaned Recovery: {orphan_recovery_count}"
 
-            if recovery_status:
-                summary = self.generate_position_summary(
-                    position=position,
-                    recovery_status=recovery_status,
-                    account_balance=account_info.get('balance', 10000),
-                    profit_target_percent=profit_target_percent,
-                    max_hold_hours=max_hold_hours,
-                    concise=concise
-                )
-                report += summary
+        # Managed positions with recovery details
+        if orphan_analysis['managed']:
+            report += "\n\n" + "─"*80
+            report += "\n✅ MANAGED POSITIONS"
+            report += "\n" + "─"*80
+
+            for position in orphan_analysis['managed']:
+                ticket = position['ticket']
+                recovery_status = recovery_manager.get_position_status(ticket)
+
+                if recovery_status:
+                    # Standard position summary
+                    summary = self.generate_position_summary(
+                        position=position,
+                        recovery_status=recovery_status,
+                        account_balance=account_info.get('balance', 10000),
+                        profit_target_percent=profit_target_percent,
+                        max_hold_hours=max_hold_hours,
+                        concise=concise
+                    )
+                    report += summary
+
+        # Orphaned parent positions (WARNING!)
+        if orphan_analysis['orphaned_parent']:
+            report += "\n\n" + "─"*80
+            report += "\n⚠️  ORPHANED PARENT POSITIONS - NOT MANAGED BY BOT!"
+            report += "\n" + "─"*80
+            report += "\n⚠️  These positions are open but not tracked by recovery system"
+            report += "\n⚠️  No Grid/Hedge/DCA protection will be applied"
+
+            for pos in orphan_analysis['orphaned_parent']:
+                report += f"\n\n📊 #{pos['ticket']} ({pos['symbol']} {pos['type'].upper()})"
+                report += f"\n   Entry: {pos['price_open']:.5f} | Current: {pos['price_current']:.5f}"
+                report += f"\n   P&L: ${pos.get('profit', 0):+.2f}"
+                report += f"\n   ⚠️  STATUS: ORPHANED - Add to tracking or close manually!"
+
+        # Orphaned recovery trades (CRITICAL WARNING!)
+        if orphan_analysis['orphaned_recovery']:
+            report += "\n\n" + "─"*80
+            report += "\n🚨 ORPHANED RECOVERY TRADES - PARENT POSITION CLOSED!"
+            report += "\n" + "─"*80
+            report += "\n🚨 These recovery trades are still open but their parent position is closed"
+            report += "\n🚨 They should be manually reviewed and closed"
+
+            for orphan in orphan_analysis['orphaned_recovery']:
+                pos = orphan['position']
+                parent = orphan['parent_ticket']
+                rec_type = orphan['recovery_type']
+
+                report += f"\n\n{rec_type} Trade #{pos['ticket']} (Parent was #{parent})"
+                report += f"\n   Symbol: {pos['symbol']} {pos['type'].upper()}"
+                report += f"\n   Entry: {pos['price_open']:.5f} | Current: {pos['price_current']:.5f}"
+                report += f"\n   P&L: ${pos.get('profit', 0):+.2f}"
+                report += f"\n   🚨 ACTION: Manual review required - close or re-parent!"
 
         report += "\n" + "="*80
 

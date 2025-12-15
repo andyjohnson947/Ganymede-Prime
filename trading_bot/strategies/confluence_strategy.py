@@ -33,6 +33,19 @@ from config.strategy_config import (
     DETECT_ORPHANS,
 )
 
+# Import partial close config (if available)
+try:
+    from config.strategy_config import (
+        PARTIAL_CLOSE_ENABLED,
+        PARTIAL_CLOSE_LEVELS,
+        PARTIAL_CLOSE_ORDER,
+    )
+except ImportError:
+    # Default values if not yet in config
+    PARTIAL_CLOSE_ENABLED = False
+    PARTIAL_CLOSE_LEVELS = []
+    PARTIAL_CLOSE_ORDER = 'recovery_first'
+
 
 class ConfluenceStrategy:
     """Main trading strategy implementation"""
@@ -248,13 +261,33 @@ class ConfluenceStrategy:
                     self._execute_recovery_action(action)
 
                 # Check exit conditions (only for tracked original positions)
-                # Priority order: 1) Profit target, 2) Time limit, 3) VWAP reversion
+                # Priority order: 0) Partial close, 1) Full profit target, 2) Time limit, 3) VWAP reversion
 
                 # Get account info for profit target calculation
                 account_info = self.mt5.get_account_info()
                 all_positions = self.mt5.get_positions()
 
-                # 1. Check profit target (from config)
+                # 0. Check partial close triggers (lock in profits incrementally)
+                if account_info and PARTIAL_CLOSE_ENABLED:
+                    partial_close_config = {
+                        'enabled': PARTIAL_CLOSE_ENABLED,
+                        'levels': PARTIAL_CLOSE_LEVELS,
+                        'close_order': PARTIAL_CLOSE_ORDER,
+                    }
+
+                    partial_close_action = self.recovery_manager.check_partial_close_trigger(
+                        ticket=ticket,
+                        mt5_positions=all_positions,
+                        account_balance=account_info['balance'],
+                        profit_target_percent=PROFIT_TARGET_PERCENT,
+                        partial_close_config=partial_close_config
+                    )
+
+                    if partial_close_action:
+                        self._execute_partial_close(ticket, partial_close_action, all_positions)
+                        # Don't continue - allow further checks after partial close
+
+                # 1. Check full profit target (from config)
                 if account_info and self.recovery_manager.check_profit_target(
                     ticket=ticket,
                     mt5_positions=all_positions,
@@ -402,6 +435,70 @@ class ConfluenceStrategy:
         self.recovery_manager.untrack_position(original_ticket)
 
         print(f"📦 Stack closed: {closed_count}/{len(stack_tickets)} positions")
+
+    def _execute_partial_close(
+        self,
+        original_ticket: int,
+        partial_action: Dict,
+        all_positions: List[Dict]
+    ):
+        """
+        Execute partial close of recovery stack
+
+        Args:
+            original_ticket: Original position ticket
+            partial_action: Partial close action from recovery_manager
+            all_positions: All current MT5 positions
+        """
+        trigger_percent = partial_action['trigger_percent']
+        close_percent = partial_action['close_percent']
+
+        # Get tickets to close based on close order strategy
+        tickets_to_close = self.recovery_manager.get_partial_close_tickets(
+            ticket=original_ticket,
+            close_percent=close_percent,
+            mt5_positions=all_positions,
+            close_order=PARTIAL_CLOSE_ORDER
+        )
+
+        if not tickets_to_close:
+            print(f"⚠️ No tickets available for partial close of {original_ticket}")
+            return
+
+        print(f"💰 Executing partial close for {original_ticket}")
+        print(f"   Trigger: {trigger_percent}% profit level")
+        print(f"   Closing {close_percent}% of stack ({len(tickets_to_close)} positions)")
+
+        closed_count = 0
+        closed_volume = 0.0
+
+        for ticket in tickets_to_close:
+            # Find position in all_positions to get volume
+            pos_volume = 0.0
+            for pos in all_positions:
+                if pos['ticket'] == ticket:
+                    pos_volume = pos['volume']
+                    break
+
+            if self.mt5.close_position(ticket):
+                closed_count += 1
+                closed_volume += pos_volume
+                self.stats['trades_closed'] += 1
+                print(f"   ✅ Closed #{ticket} ({pos_volume} lots)")
+            else:
+                print(f"   ❌ Failed to close #{ticket}")
+
+        # Record partial close
+        self.recovery_manager.record_partial_close(
+            ticket=original_ticket,
+            trigger_level=trigger_percent,
+            closed_tickets=tickets_to_close,
+            closed_volume=closed_volume
+        )
+
+        print(f"💰 Partial close complete: {closed_count}/{len(tickets_to_close)} positions")
+        print(f"   Volume closed: {closed_volume:.2f} lots")
+        print(f"   Remaining stack positions tracking...")
 
     def _execute_recovery_action(self, action: Dict):
         """

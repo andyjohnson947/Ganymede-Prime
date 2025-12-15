@@ -196,6 +196,47 @@ PROFIT_TARGET_PERCENT = 1.0  # Target: ~$10 per trade at $1,023 account (1% of b
 MAX_POSITION_HOURS = 12  # AGGRESSIVE: 12 hours max (was 4) - gives recovery time to work
 
 # =============================================================================
+# PARTIAL CLOSE SETTINGS (Lock in Profits Incrementally)
+# =============================================================================
+
+# Enable/disable partial close mechanism
+PARTIAL_CLOSE_ENABLED = True  # Set to True to enable partial profit-taking
+
+# Partial close levels - close portions of stack at profit milestones
+# Each level specifies: trigger_percent (% of target profit) and close_percent (% of stack to close)
+PARTIAL_CLOSE_LEVELS = [
+    {'trigger_percent': 50, 'close_percent': 50},  # At 50% profit ($5), close 50% of stack
+    {'trigger_percent': 75, 'close_percent': 30},  # At 75% profit ($7.50), close 30% more
+    # Remaining 20% stays open until 100% target ($10) or time limit
+]
+
+# Example configurations for different strategies:
+#
+# Conservative (lock in profits early):
+# [
+#     {'trigger_percent': 30, 'close_percent': 40},
+#     {'trigger_percent': 50, 'close_percent': 30},
+#     {'trigger_percent': 75, 'close_percent': 20},
+# ]
+#
+# Aggressive (let more run):
+# [
+#     {'trigger_percent': 60, 'close_percent': 40},
+#     {'trigger_percent': 90, 'close_percent': 40},
+# ]
+#
+# No partial close (original behavior):
+# []
+
+# Close order strategy - determines which positions to close first
+# Options:
+#   'recovery_first': Close grid/DCA/hedge positions first, keep original trade last (recommended)
+#   'lifo': Close most recent positions first (Last In First Out)
+#   'fifo': Close oldest positions first (First In First Out)
+#   'largest_first': Close largest lot sizes first
+PARTIAL_CLOSE_ORDER = 'recovery_first'
+
+# =============================================================================
 # DATA MANAGEMENT
 # =============================================================================
 

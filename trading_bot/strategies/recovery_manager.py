@@ -84,6 +84,11 @@ class RecoveryManager:
             'max_underwater_pips': 0,
             'recovery_active': False,
             'open_time': datetime.now(),  # Track when position opened
+            'partial_close_state': {  # Track partial closures
+                'levels_closed': [],  # Which profit levels have been closed
+                'tickets_closed': [],  # Which tickets have been closed
+                'total_closed_volume': 0.0,  # Total volume closed via partial
+            },
         }
 
     def untrack_position(self, ticket: int):
@@ -622,3 +627,191 @@ class RecoveryManager:
             return True
 
         return False
+
+    def check_partial_close_trigger(
+        self,
+        ticket: int,
+        mt5_positions: List[Dict],
+        account_balance: float,
+        profit_target_percent: float,
+        partial_close_config: Dict
+    ) -> Optional[Dict]:
+        """
+        Check if we should execute a partial close at a profit milestone
+
+        Args:
+            ticket: Original position ticket
+            mt5_positions: List of all current MT5 positions
+            account_balance: Account balance
+            profit_target_percent: Full profit target (e.g., 1.0%)
+            partial_close_config: Dict with partial close settings
+
+        Returns:
+            Dict with partial close instructions or None
+        """
+        if not partial_close_config.get('enabled', False):
+            return None
+
+        if ticket not in self.tracked_positions:
+            return None
+
+        position = self.tracked_positions[ticket]
+        partial_state = position['partial_close_state']
+
+        # Calculate current profit
+        net_profit = self.calculate_net_profit(ticket, mt5_positions)
+        if net_profit is None or net_profit <= 0:
+            return None
+
+        # Calculate target profit in dollars
+        full_target = account_balance * (profit_target_percent / 100.0)
+
+        # Calculate profit percentage achieved
+        profit_percent_achieved = (net_profit / full_target) * 100
+
+        # Check partial close levels
+        levels = partial_close_config.get('levels', [
+            {'trigger_percent': 50, 'close_percent': 50},  # At 50% profit, close 50%
+            {'trigger_percent': 75, 'close_percent': 30},  # At 75% profit, close 30%
+        ])
+
+        for level in levels:
+            trigger = level['trigger_percent']
+            close_pct = level['close_percent']
+
+            # Check if this level has already been closed
+            if trigger in partial_state['levels_closed']:
+                continue
+
+            # Check if we've reached this profit level
+            if profit_percent_achieved >= trigger:
+                print(f"📊 Partial close trigger reached for {ticket}")
+                print(f"   Profit: ${net_profit:.2f} ({profit_percent_achieved:.1f}% of target)")
+                print(f"   Closing {close_pct}% of position at {trigger}% profit level")
+
+                return {
+                    'ticket': ticket,
+                    'trigger_percent': trigger,
+                    'close_percent': close_pct,
+                    'net_profit': net_profit,
+                    'profit_percent_achieved': profit_percent_achieved,
+                }
+
+        return None
+
+    def get_partial_close_tickets(
+        self,
+        ticket: int,
+        close_percent: float,
+        mt5_positions: List[Dict],
+        close_order: str = 'recovery_first'
+    ) -> List[int]:
+        """
+        Determine which positions to close for partial close
+
+        Args:
+            ticket: Original position ticket
+            close_percent: Percentage of stack to close (0-100)
+            mt5_positions: List of all current MT5 positions
+            close_order: 'recovery_first', 'lifo', 'fifo', or 'largest_first'
+
+        Returns:
+            List of ticket numbers to close
+        """
+        if ticket not in self.tracked_positions:
+            return []
+
+        position = self.tracked_positions[ticket]
+        stack_tickets = self.get_all_stack_tickets(ticket)
+        partial_state = position['partial_close_state']
+
+        # Filter out already closed tickets
+        available_tickets = [t for t in stack_tickets
+                           if t not in partial_state['tickets_closed']]
+
+        if not available_tickets:
+            return []
+
+        # Get position details from MT5
+        stack_positions = []
+        for mt5_pos in mt5_positions:
+            if mt5_pos['ticket'] in available_tickets:
+                stack_positions.append({
+                    'ticket': mt5_pos['ticket'],
+                    'volume': mt5_pos['volume'],
+                    'type': mt5_pos['type'],
+                    'is_original': mt5_pos['ticket'] == ticket,
+                    'is_recovery': mt5_pos['ticket'] != ticket,
+                    'timestamp': mt5_pos.get('time', 0),
+                })
+
+        if not stack_positions:
+            return []
+
+        # Calculate total volume
+        total_volume = sum(p['volume'] for p in stack_positions)
+        target_close_volume = total_volume * (close_percent / 100.0)
+
+        # Sort positions based on close order strategy
+        if close_order == 'recovery_first':
+            # Close recovery positions first (grid, DCA, hedge), keep original last
+            stack_positions.sort(key=lambda p: (not p['is_recovery'], p['timestamp']))
+
+        elif close_order == 'lifo':
+            # Close most recent first
+            stack_positions.sort(key=lambda p: p['timestamp'], reverse=True)
+
+        elif close_order == 'fifo':
+            # Close oldest first
+            stack_positions.sort(key=lambda p: p['timestamp'])
+
+        elif close_order == 'largest_first':
+            # Close largest positions first
+            stack_positions.sort(key=lambda p: p['volume'], reverse=True)
+
+        # Select positions to close until we reach target volume
+        tickets_to_close = []
+        volume_to_close = 0.0
+
+        for pos in stack_positions:
+            if volume_to_close >= target_close_volume:
+                break
+
+            tickets_to_close.append(pos['ticket'])
+            volume_to_close += pos['volume']
+
+        return tickets_to_close
+
+    def record_partial_close(
+        self,
+        ticket: int,
+        trigger_level: float,
+        closed_tickets: List[int],
+        closed_volume: float
+    ):
+        """
+        Record that a partial close was executed
+
+        Args:
+            ticket: Original position ticket
+            trigger_level: Which profit level triggered this close
+            closed_tickets: List of tickets that were closed
+            closed_volume: Total volume closed
+        """
+        if ticket not in self.tracked_positions:
+            return
+
+        position = self.tracked_positions[ticket]
+        partial_state = position['partial_close_state']
+
+        # Record this level as closed
+        if trigger_level not in partial_state['levels_closed']:
+            partial_state['levels_closed'].append(trigger_level)
+
+        # Record closed tickets
+        for closed_ticket in closed_tickets:
+            if closed_ticket not in partial_state['tickets_closed']:
+                partial_state['tickets_closed'].append(closed_ticket)
+
+        # Update total closed volume
+        partial_state['total_closed_volume'] += closed_volume

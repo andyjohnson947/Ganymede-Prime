@@ -51,7 +51,9 @@ class PositionStatusReporter:
         entry_price = position['price_open']
         current_price = position['price_current']
         profit = position.get('profit', 0)
-        entry_time = position.get('time', datetime.now())
+
+        # Use tracked position's open_time (set by bot) instead of MT5 time to avoid timezone issues
+        entry_time = recovery_status.get('open_time', datetime.now())
 
         # Calculate age
         if isinstance(entry_time, datetime):
@@ -82,8 +84,8 @@ class PositionStatusReporter:
 
         if concise:
             # Concise format (3-5 lines)
-            summary = f"\n📊 #{ticket} ({symbol} {pos_type})"
-            summary += f"\n   {entry_price:.5f} → {current_price:.5f} | "
+            summary = f"\n[{ticket}] {symbol} {pos_type}"
+            summary += f"\n   {entry_price:.5f} -> {current_price:.5f} | "
             summary += f"${profit:+.2f} ({pips:+.1f} pips) | Age: {age_str}"
 
             # Recovery status (one line)
@@ -104,20 +106,20 @@ class PositionStatusReporter:
                 exit_parts.append(f"Target:{profit_percent:.0f}% (${profit:.2f}/${profit_target:.2f})")
             exit_parts.append(f"Time:{time_remaining_str}")
 
-            summary += f"\n   {' | '.join(exit_parts)}"
-
-            # Action
+            # Status indicator
             if profit_percent >= 90:
-                summary += f" | ⚠️  CLOSE SOON"
+                status = "[CLOSE SOON]"
             elif profit >= 0:
-                summary += f" | ✅ HOLD"
+                status = "[PROFIT]"
             else:
-                summary += f" | 📉 Underwater"
+                status = f"[UNDERWATER {abs(pips):.1f} pips]"
+
+            summary += f"\n   {' | '.join(exit_parts)} | {status}"
 
         else:
             # Detailed format (10+ lines)
             summary = f"\n{'='*80}"
-            summary += f"\n📊 Position #{ticket} ({symbol})"
+            summary += f"\n[Position {ticket}] {symbol}"
             summary += f"\n{'='*80}"
             summary += f"\n  Direction: {pos_type}"
             summary += f"\n  Entry: {entry_price:.5f} @ {entry_time.strftime('%Y-%m-%d %H:%M:%S')}"
@@ -126,23 +128,23 @@ class PositionStatusReporter:
             summary += f"\n  Age: {age_str}"
             summary += f"\n"
             summary += f"\n  Recovery Status:"
-            summary += f"\n  ├─ Grid: {grid_levels}/4 levels"
-            summary += f"\n  ├─ Hedge: {hedge_count}/1"
-            summary += f"\n  └─ DCA: {dca_levels}/8 levels"
+            summary += f"\n  |- Grid: {grid_levels}/4 levels"
+            summary += f"\n  |- Hedge: {hedge_count}/1"
+            summary += f"\n  \- DCA: {dca_levels}/8 levels"
             summary += f"\n"
             summary += f"\n  Exit Conditions:"
-            summary += f"\n  ├─ Profit Target: ${profit_target:.2f} ({profit_percent:.0f}% there)"
-            summary += f"\n  └─ Time Limit: {time_remaining_str} remaining"
+            summary += f"\n  |- Profit Target: ${profit_target:.2f} ({profit_percent:.0f}% there)"
+            summary += f"\n  \- Time Limit: {time_remaining_str} remaining"
 
             if profit_percent >= 90:
                 summary += f"\n"
-                summary += f"\n  ⚠️  ACTION: Close soon - near profit target!"
+                summary += f"\n  ACTION: Close soon - near profit target!"
             elif profit >= 0:
                 summary += f"\n"
-                summary += f"\n  ✅ ACTION: HOLD - Position profitable"
+                summary += f"\n  ACTION: HOLD - Position profitable"
             else:
                 summary += f"\n"
-                summary += f"\n  📉 ACTION: HOLD - Managing drawdown with recovery"
+                summary += f"\n  ACTION: HOLD - Managing drawdown with recovery"
 
         return summary
 
@@ -258,9 +260,9 @@ class PositionStatusReporter:
         tracked_pos = recovery_manager.tracked_positions.get(ticket)
 
         if not tracked_pos:
-            return f"📊 #{ticket} - NOT MANAGED ⚠️"
+            return f"[{ticket}] - NOT MANAGED [WARNING]"
 
-        tree = f"📊 #{ticket} ({parent_position['symbol']} {parent_position['type'].upper()}) - PARENT"
+        tree = f"[{ticket}] {parent_position['symbol']} {parent_position['type'].upper()} - PARENT"
 
         # Create MT5 position lookup
         mt5_lookup = {p['ticket']: p for p in all_mt5_positions}
@@ -273,53 +275,53 @@ class PositionStatusReporter:
         for i, grid in enumerate(grid_levels):
             grid_ticket = grid.get('ticket')
             is_last_grid = (i == len(grid_levels) - 1) and not hedge_tickets and not dca_levels
-            prefix = "└─" if is_last_grid else "├─"
+            prefix = "\-" if is_last_grid else "|-"
 
             if grid_ticket and grid_ticket in mt5_lookup:
                 mt5_pos = mt5_lookup[grid_ticket]
-                status = "✅ OPEN"
+                status = "[OPEN]"
                 price = mt5_pos['price_current']
             else:
-                status = "❌ CLOSED"
+                status = "[CLOSED]"
                 price = grid.get('price', 0)
 
-            tree += f"\n{prefix} 🔹 Grid L{i+1}: #{grid_ticket} ({grid['volume']:.2f} lots @ {price:.5f}) {status}"
+            tree += f"\n{prefix} Grid L{i+1}: #{grid_ticket} ({grid['volume']:.2f} lots @ {price:.5f}) {status}"
 
         # Hedge trades
         for i, hedge in enumerate(hedge_tickets):
             hedge_ticket = hedge.get('ticket')
             is_last_hedge = (i == len(hedge_tickets) - 1) and not dca_levels
-            prefix = "└─" if is_last_hedge else "├─"
+            prefix = "\-" if is_last_hedge else "|-"
 
             if hedge_ticket and hedge_ticket in mt5_lookup:
                 mt5_pos = mt5_lookup[hedge_ticket]
-                status = "✅ OPEN"
+                status = "[OPEN]"
                 volume = mt5_pos.get('volume', hedge.get('volume', 0))
                 price = mt5_pos['price_current']
             else:
-                status = "❌ CLOSED"
+                status = "[CLOSED]"
                 volume = hedge.get('volume', 0)
                 price = hedge.get('price', 0)
 
-            tree += f"\n{prefix} 🛡️  Hedge: #{hedge_ticket} ({volume:.2f} lots @ {price:.5f}) {status}"
+            tree += f"\n{prefix} Hedge: #{hedge_ticket} ({volume:.2f} lots @ {price:.5f}) {status}"
 
         # DCA levels
         for i, dca in enumerate(dca_levels):
             dca_ticket = dca.get('ticket')
             is_last = (i == len(dca_levels) - 1)
-            prefix = "└─" if is_last else "├─"
+            prefix = "\-" if is_last else "|-"
 
             if dca_ticket and dca_ticket in mt5_lookup:
                 mt5_pos = mt5_lookup[dca_ticket]
-                status = "✅ OPEN"
+                status = "[OPEN]"
                 volume = mt5_pos.get('volume', dca.get('volume', 0))
                 price = mt5_pos['price_current']
             else:
-                status = "❌ CLOSED"
+                status = "[CLOSED]"
                 volume = dca.get('volume', 0)
                 price = dca.get('price', 0)
 
-            tree += f"\n{prefix} 💰 DCA L{i+1}: #{dca_ticket} ({volume:.2f} lots @ {price:.5f}) {status}"
+            tree += f"\n{prefix} DCA L{i+1}: #{dca_ticket} ({volume:.2f} lots @ {price:.5f}) {status}"
 
         return tree
 
@@ -344,13 +346,13 @@ class PositionStatusReporter:
             Formatted status report string
         """
         if not positions:
-            return "\n📊 STATUS REPORT: No open positions"
+            return "\n[STATUS REPORT] No open positions"
 
         # Detect orphaned positions
         orphan_analysis = self.detect_orphaned_positions(positions, recovery_manager)
 
         report = "\n" + "="*80
-        report += f"\n📊 POSITION STATUS REPORT - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        report += f"\n[POSITION STATUS REPORT] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         report += "\n" + "="*80
 
         # Overall stats
@@ -359,14 +361,14 @@ class PositionStatusReporter:
         orphan_parent_count = len(orphan_analysis['orphaned_parent'])
         orphan_recovery_count = len(orphan_analysis['orphaned_recovery'])
 
-        report += f"\n📈 {len(positions)} total position(s) | Total P&L: ${total_pnl:+.2f}"
-        report += f"\n   ✅ Managed: {managed_count} | ⚠️  Orphaned Parents: {orphan_parent_count} | ⚠️  Orphaned Recovery: {orphan_recovery_count}"
+        report += f"\n[SUMMARY] {len(positions)} total position(s) | Total P&L: ${total_pnl:+.2f}"
+        report += f"\n   Managed: {managed_count} | Orphaned Parents: {orphan_parent_count} | Orphaned Recovery: {orphan_recovery_count}"
 
         # Managed positions with recovery details
         if orphan_analysis['managed']:
-            report += "\n\n" + "─"*80
-            report += "\n✅ MANAGED POSITIONS"
-            report += "\n" + "─"*80
+            report += "\n\n" + "-"*80
+            report += "\n[MANAGED POSITIONS]"
+            report += "\n" + "-"*80
 
             for position in orphan_analysis['managed']:
                 ticket = position['ticket']
@@ -387,36 +389,36 @@ class PositionStatusReporter:
 
         # Orphaned parent positions (WARNING!)
         if orphan_analysis['orphaned_parent']:
-            report += "\n\n" + "─"*80
-            report += "\n⚠️  ORPHANED PARENT POSITIONS - NOT MANAGED BY BOT!"
-            report += "\n" + "─"*80
-            report += "\n⚠️  These positions are open but not tracked by recovery system"
-            report += "\n⚠️  No Grid/Hedge/DCA protection will be applied"
+            report += "\n\n" + "-"*80
+            report += "\n[WARNING] ORPHANED PARENT POSITIONS - NOT MANAGED BY BOT!"
+            report += "\n" + "-"*80
+            report += "\n[!] These positions are open but not tracked by recovery system"
+            report += "\n[!] No Grid/Hedge/DCA protection will be applied"
 
             for pos in orphan_analysis['orphaned_parent']:
-                report += f"\n\n📊 #{pos['ticket']} ({pos['symbol']} {pos['type'].upper()})"
+                report += f"\n\n[{pos['ticket']}] {pos['symbol']} {pos['type'].upper()}"
                 report += f"\n   Entry: {pos['price_open']:.5f} | Current: {pos['price_current']:.5f}"
                 report += f"\n   P&L: ${pos.get('profit', 0):+.2f}"
-                report += f"\n   ⚠️  STATUS: ORPHANED - Add to tracking or close manually!"
+                report += f"\n   [STATUS] ORPHANED - Add to tracking or close manually!"
 
         # Orphaned recovery trades (CRITICAL WARNING!)
         if orphan_analysis['orphaned_recovery']:
-            report += "\n\n" + "─"*80
-            report += "\n🚨 ORPHANED RECOVERY TRADES - PARENT POSITION CLOSED!"
-            report += "\n" + "─"*80
-            report += "\n🚨 These recovery trades are still open but their parent position is closed"
-            report += "\n🚨 They should be manually reviewed and closed"
+            report += "\n\n" + "-"*80
+            report += "\n[CRITICAL] ORPHANED RECOVERY TRADES - PARENT POSITION CLOSED!"
+            report += "\n" + "-"*80
+            report += "\n[!] These recovery trades are still open but their parent position is closed"
+            report += "\n[!] They should be manually reviewed and closed"
 
             for orphan in orphan_analysis['orphaned_recovery']:
                 pos = orphan['position']
                 parent = orphan['parent_ticket']
                 rec_type = orphan['recovery_type']
 
-                report += f"\n\n{rec_type} Trade #{pos['ticket']} (Parent was #{parent})"
+                report += f"\n\n[{rec_type}] Trade #{pos['ticket']} (Parent was #{parent})"
                 report += f"\n   Symbol: {pos['symbol']} {pos['type'].upper()}"
                 report += f"\n   Entry: {pos['price_open']:.5f} | Current: {pos['price_current']:.5f}"
                 report += f"\n   P&L: ${pos.get('profit', 0):+.2f}"
-                report += f"\n   🚨 ACTION: Manual review required - close or re-parent!"
+                report += f"\n   [ACTION] Manual review required - close or re-parent!"
 
         report += "\n" + "="*80
 
@@ -448,7 +450,7 @@ class PositionStatusReporter:
 
         if profit_percent >= proximity_threshold:
             return (
-                f"⚠️  APPROACHING TARGET - Position #{position['ticket']} "
+                f"[ALERT] APPROACHING TARGET - Position #{position['ticket']} "
                 f"at {profit_percent:.0f}% of profit target "
                 f"(${profit:.2f}/${profit_target:.2f})"
             )
@@ -477,7 +479,7 @@ class PositionStatusReporter:
             price = details.get('price', 0)
             volume = details.get('volume', 0)
             return (
-                f"🔹 GRID L{level} ADDED - Position #{ticket}\n"
+                f"[GRID L{level}] ADDED - Position #{ticket}\n"
                 f"   Price: {price:.5f} | Volume: {volume:.2f} lots\n"
                 f"   Reason: Price moved {details.get('pips', 0):.1f} pips against position"
             )
@@ -486,7 +488,7 @@ class PositionStatusReporter:
             volume = details.get('volume', 0)
             trigger_pips = details.get('trigger_pips', 0)
             return (
-                f"🛡️  HEDGE ACTIVATED - Position #{ticket}\n"
+                f"[HEDGE] ACTIVATED - Position #{ticket}\n"
                 f"   Volume: {volume:.2f} lots ({details.get('ratio', 0):.1f}x)\n"
                 f"   Triggered at: {trigger_pips:.1f} pips underwater"
             )
@@ -496,12 +498,12 @@ class PositionStatusReporter:
             price = details.get('price', 0)
             volume = details.get('volume', 0)
             return (
-                f"💰 DCA L{level} ADDED - Position #{ticket}\n"
+                f"[DCA L{level}] ADDED - Position #{ticket}\n"
                 f"   Price: {price:.5f} | Volume: {volume:.2f} lots\n"
                 f"   Total exposure: {details.get('total_volume', 0):.2f} lots"
             )
 
-        return f"Recovery action: {action_type}"
+        return f"[RECOVERY] {action_type}"
 
     def format_position_close(
         self,
@@ -519,11 +521,11 @@ class PositionStatusReporter:
         Returns:
             Formatted close message
         """
-        direction = "🟢" if profit > 0 else "🔴"
+        result = "[WIN]" if profit > 0 else "[LOSS]"
         pips = abs(exit_price - entry_price) * 10000
 
-        message = f"\n{direction} POSITION CLOSED - #{ticket}"
-        message += f"\n   Entry: {entry_price:.5f} → Exit: {exit_price:.5f}"
+        message = f"\n{result} POSITION CLOSED - #{ticket}"
+        message += f"\n   Entry: {entry_price:.5f} -> Exit: {exit_price:.5f}"
         message += f"\n   P&L: ${profit:+.2f} ({pips:.1f} pips) | Held: {self._format_timedelta(hold_time)}"
         message += f"\n   Reason: {close_reason}"
 

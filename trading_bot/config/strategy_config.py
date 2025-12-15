@@ -108,7 +108,7 @@ SKIP_STRONG_TRENDS = True  # Never trade when ADX > 40
 GRID_ENABLED = True
 GRID_SPACING_PIPS = 8  # Tighter spacing: Trigger every 8 pips (was 10.8)
 MAX_GRID_LEVELS = 4  # More levels: Maximum 4 grid levels (was 2)
-GRID_LOT_SIZE = 0.05  # Stronger grid: 0.05 per level (increased from 0.03)
+GRID_LOT_SIZE = 0.08  # Matches base for clean partial closes (base + 4 grids = 0.40 lots max)
 
 # =============================================================================
 # HEDGING PARAMETERS (AGGRESSIVE RECOVERY SETTINGS)
@@ -131,14 +131,14 @@ DCA_TRIGGER_PIPS = 10  # OPTIMIZED: Trigger every 10 pips (from analysis)
 DCA_MAX_LEVELS = 8  # OPTIMIZED: 8 levels proven (100% success in 4/4 sequences)
 DCA_MULTIPLIER = 1.49  # OPTIMIZED: Conservative 1.49x (from 8-level analysis, was 2.0x)
 DCA_MAX_DRAWDOWN_PIPS = 70  # SAFETY: Emergency exit if drawdown exceeds 70 pips
-DCA_MAX_TOTAL_EXPOSURE = 0.5  # SAFETY: Maximum total lots across all DCA levels
+DCA_MAX_TOTAL_EXPOSURE = 0.8  # SAFETY: Adjusted for 0.08 base (was 0.5 for 0.05 base)
 
 # =============================================================================
 # RISK MANAGEMENT (AGGRESSIVE SETTINGS)
 # =============================================================================
 
 # Base lot size for initial positions
-BASE_LOT_SIZE = 0.08  # Optimized for partial closes: 50% = 0.04, 30% = 0.024, 20% = 0.016
+BASE_LOT_SIZE = 0.08  # Optimized for partial closes: 50% = 0.04, 25% = 0.02, 25% = 0.02
 
 # Risk per trade (if using dynamic position sizing)
 RISK_PERCENT = 1.0

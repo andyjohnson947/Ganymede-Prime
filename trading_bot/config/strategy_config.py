@@ -131,7 +131,7 @@ DCA_TRIGGER_PIPS = 10  # OPTIMIZED: Trigger every 10 pips (from analysis)
 DCA_MAX_LEVELS = 8  # OPTIMIZED: 8 levels proven (100% success in 4/4 sequences)
 DCA_MULTIPLIER = 1.49  # OPTIMIZED: Conservative 1.49x (from 8-level analysis, was 2.0x)
 DCA_MAX_DRAWDOWN_PIPS = 70  # SAFETY: Emergency exit if drawdown exceeds 70 pips
-DCA_MAX_TOTAL_EXPOSURE = 0.8  # SAFETY: Adjusted for 0.08 base (was 0.5 for 0.05 base)
+DCA_MAX_TOTAL_EXPOSURE = 6.0  # SAFETY: Scaled for 0.08 base to allow full 8 levels (0.08→L8 = 5.77 lots)
 
 # =============================================================================
 # RISK MANAGEMENT (AGGRESSIVE SETTINGS)
@@ -147,7 +147,7 @@ RISK_PERCENT = 1.0
 USE_FIXED_LOT_SIZE = True
 
 # Maximum total exposure across all positions
-MAX_TOTAL_LOTS = 15.0  # AGGRESSIVE: Increased from 5.04 to accommodate larger recovery stacks
+MAX_TOTAL_LOTS = 23.0  # AGGRESSIVE: Scaled for 8-level DCA (3 positions × ~6.6 lots max each = ~20 lots)
 
 # Maximum drawdown before stopping
 MAX_DRAWDOWN_PERCENT = 10.0

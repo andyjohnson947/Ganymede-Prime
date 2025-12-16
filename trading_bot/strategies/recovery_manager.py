@@ -93,6 +93,107 @@ class RecoveryManager:
             },
         }
 
+    def adopt_existing_positions(self, mt5_positions: List[Dict], magic_number: int = None) -> int:
+        """
+        Adopt existing MT5 positions into tracking system (for crash recovery)
+
+        This method reconstructs recovery state from existing positions,
+        allowing the bot to resume management after restarts.
+
+        Args:
+            mt5_positions: List of all current MT5 positions
+            magic_number: Bot's magic number to filter trades (None = adopt all)
+
+        Returns:
+            int: Number of positions adopted
+        """
+        adopted_count = 0
+
+        for pos in mt5_positions:
+            ticket = pos['ticket']
+
+            # Skip if already tracked
+            if ticket in self.tracked_positions:
+                continue
+
+            # Filter by magic number if specified
+            if magic_number is not None and pos.get('magic', 0) != magic_number:
+                continue
+
+            # Extract position details
+            symbol = pos['symbol']
+            entry_price = pos['price_open']
+            position_type = 'buy' if pos['type'] == 0 else 'sell'
+            volume = pos['volume']
+
+            # Check if this looks like a recovery position (from comment)
+            comment = pos.get('comment', '')
+
+            # Try to identify parent position from comment
+            # Format: "Grid L1 - 12345" or "DCA L2 - 12345" or "Hedge - 12345"
+            parent_ticket = None
+            if ' - ' in comment:
+                try:
+                    parent_ticket = int(comment.split(' - ')[-1])
+                except (ValueError, IndexError):
+                    pass
+
+            # If this is a recovery position, try to link to parent
+            if parent_ticket and parent_ticket in self.tracked_positions:
+                # This is a recovery order for an already-tracked parent
+                position = self.tracked_positions[parent_ticket]
+
+                if 'Grid' in comment:
+                    # Add to grid levels
+                    level_num = len(position['grid_levels']) + 1
+                    position['grid_levels'].append({
+                        'ticket': ticket,
+                        'price': entry_price,
+                        'volume': volume,
+                        'time': datetime.now()
+                    })
+                    position['total_volume'] += volume
+                    print(f"   🔗 Linked Grid L{level_num} (#{ticket}) to parent #{parent_ticket}")
+
+                elif 'DCA' in comment:
+                    # Add to DCA levels
+                    level_num = len(position['dca_levels']) + 1
+                    position['dca_levels'].append({
+                        'ticket': ticket,
+                        'price': entry_price,
+                        'volume': volume,
+                        'level': level_num,
+                        'time': datetime.now()
+                    })
+                    position['total_volume'] += volume
+                    print(f"   🔗 Linked DCA L{level_num} (#{ticket}) to parent #{parent_ticket}")
+
+                elif 'Hedge' in comment:
+                    # Add to hedges
+                    hedge_type = 'sell' if position_type == 'buy' else 'buy'
+                    position['hedge_tickets'].append({
+                        'ticket': ticket,
+                        'type': hedge_type,
+                        'volume': volume,
+                        'trigger_pips': 0,  # Unknown, will recalculate
+                        'time': datetime.now()
+                    })
+                    print(f"   🔗 Linked Hedge (#{ticket}) to parent #{parent_ticket}")
+
+            else:
+                # This looks like an original/parent position - track it
+                self.track_position(
+                    ticket=ticket,
+                    symbol=symbol,
+                    entry_price=entry_price,
+                    position_type=position_type,
+                    volume=volume
+                )
+                adopted_count += 1
+                print(f"   ✅ Adopted position #{ticket} ({symbol} {position_type.upper()} {volume:.2f} @ {entry_price})")
+
+        return adopted_count
+
     def untrack_position(self, ticket: int):
         """Remove position from tracking"""
         if ticket in self.tracked_positions:

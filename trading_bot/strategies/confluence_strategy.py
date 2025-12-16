@@ -31,6 +31,7 @@ from config.strategy_config import (
     CONCISE_FORMAT,
     SHOW_MANAGEMENT_TREE,
     DETECT_ORPHANS,
+    MT5_MAGIC_NUMBER,
 )
 
 # Import partial close config (if available)
@@ -105,6 +106,27 @@ class ConfluenceStrategy:
         # Set initial equity (not balance) for drawdown tracking
         # This ensures existing unrealized P&L doesn't count as "new" drawdown
         self.risk_calculator.set_initial_balance(account_info['equity'])
+
+        # Adopt existing positions for crash recovery
+        print("=" * 80)
+        print("🔄 CRASH RECOVERY: Adopting existing positions")
+        print("=" * 80)
+        existing_positions = self.mt5.get_positions()
+        if existing_positions:
+            print(f"Found {len(existing_positions)} open position(s) in MT5")
+            adopted = self.recovery_manager.adopt_existing_positions(
+                existing_positions,
+                magic_number=MT5_MAGIC_NUMBER
+            )
+            if adopted > 0:
+                print(f"✅ Successfully adopted {adopted} position(s)")
+                print("   All positions now protected with Grid/Hedge/DCA recovery")
+            else:
+                print("ℹ️  No bot positions found (magic number mismatch or recovery orders only)")
+        else:
+            print("ℹ️  No existing positions to adopt")
+        print("=" * 80)
+        print()
 
         self.running = True
 

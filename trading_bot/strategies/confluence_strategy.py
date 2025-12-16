@@ -652,16 +652,36 @@ class ConfluenceStrategy:
                 print("─"*80)
 
             # Check for exit proximity alerts (if enabled)
+            # Only alert on MANAGED positions that will actually close
             if LOG_EXIT_PROXIMITY:
+                tracked_tickets = self.recovery_manager.tracked_positions.keys()
+
                 for position in all_positions:
-                    alert = self.position_reporter.check_exit_proximity(
-                        position=position,
-                        account_balance=account_info['balance'],
-                        profit_target_percent=PROFIT_TARGET_PERCENT,
-                        proximity_threshold=EXIT_PROXIMITY_PERCENT
-                    )
-                    if alert:
-                        print(alert)
+                    ticket = position['ticket']
+
+                    # Only check parent/managed positions, not recovery trades
+                    if ticket not in tracked_tickets:
+                        continue
+
+                    # For managed positions, check STACK total profit
+                    stack_profit = self.recovery_manager.calculate_net_profit(ticket, all_positions)
+                    if stack_profit is not None:
+                        # Use stack total for alert calculation
+                        profit_target = account_info['balance'] * (PROFIT_TARGET_PERCENT / 100)
+                        profit_percent = (stack_profit / profit_target * 100) if profit_target > 0 else 0
+
+                        if profit_percent >= EXIT_PROXIMITY_PERCENT:
+                            print(f"[ALERT] APPROACHING TARGET - Position #{ticket} at {profit_percent:.0f}% of profit target (${stack_profit:.2f}/${profit_target:.2f})")
+                    else:
+                        # Standalone position - use individual profit
+                        alert = self.position_reporter.check_exit_proximity(
+                            position=position,
+                            account_balance=account_info['balance'],
+                            profit_target_percent=PROFIT_TARGET_PERCENT,
+                            proximity_threshold=EXIT_PROXIMITY_PERCENT
+                        )
+                        if alert:
+                            print(alert)
 
         except Exception as e:
             print(f"❌ Error generating status report: {e}")

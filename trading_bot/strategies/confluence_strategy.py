@@ -230,8 +230,10 @@ class ConfluenceStrategy:
                 return  # Data still fresh
 
         # Fetch H1 data
+        print(f"📊 Fetching {symbol} data...", end='', flush=True)
         h1_data = self.mt5.get_historical_data(symbol, TIMEFRAME, bars=500)
         if h1_data is None:
+            print(" ❌ Failed")
             return
 
         # Calculate VWAP on H1 data
@@ -240,6 +242,7 @@ class ConfluenceStrategy:
         # Fetch HTF data
         d1_data = self.mt5.get_historical_data(symbol, 'D1', bars=100)
         w1_data = self.mt5.get_historical_data(symbol, 'W1', bars=50)
+        print(" ✅ Complete", flush=True)
 
         if d1_data is None or w1_data is None:
             return

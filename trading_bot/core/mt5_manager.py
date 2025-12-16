@@ -399,7 +399,7 @@ class MT5Manager:
             "price": price,
             "deviation": 20,
             "magic": self.magic_number,
-            "comment": f"Partial close {close_volume}" if partial_close else "Close by bot",
+            # Remove comment field - some brokers reject it on close orders
             "type_time": mt5.ORDER_TIME_GTC,
             "type_filling": filling_type,
         }

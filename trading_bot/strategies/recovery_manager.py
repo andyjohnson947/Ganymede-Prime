@@ -325,6 +325,8 @@ class RecoveryManager:
                 'type': position_type,
                 'price': grid_price,
                 'volume': grid_volume,
+                'level': len(position['grid_levels']),  # Current level number
+                'pips': pips_moved,  # Pips moved against position
                 'comment': f'Grid L{len(position["grid_levels"])} - {ticket}'
             }
 
@@ -404,6 +406,8 @@ class RecoveryManager:
                 'symbol': position['symbol'],
                 'type': hedge_type,
                 'volume': hedge_volume,
+                'ratio': HEDGE_RATIO,  # Hedge ratio (e.g., 5.0x)
+                'trigger_pips': pips_underwater,  # Pips underwater when triggered
                 'comment': f'Hedge - {ticket}'
             }
 
@@ -504,6 +508,9 @@ class RecoveryManager:
                 'symbol': position['symbol'],
                 'type': position_type,  # Same direction
                 'volume': dca_volume,
+                'level': len(position['dca_levels']),  # Current DCA level
+                'price': current_price,  # Entry price for this DCA level
+                'total_volume': position['total_volume'],  # Total stack volume after adding DCA
                 'comment': f'DCA L{len(position["dca_levels"])} - {ticket}'
             }
 

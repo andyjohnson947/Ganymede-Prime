@@ -914,13 +914,19 @@ class RecoveryManager:
                 })
                 volume_accumulated += pos['volume']
             else:
-                # Close partial volume of this position
+                # Close partial volume of this position - MUST ROUND TO BROKER STEP
+                rounded_volume = round_volume_to_step(remaining_needed, step=0.01, min_lot=0.01)
+
+                # Skip if rounded volume is invalid or too small
+                if rounded_volume < 0.01 or rounded_volume > pos['volume']:
+                    continue
+
                 positions_to_close.append({
                     'ticket': pos['ticket'],
-                    'volume': remaining_needed,  # Close only what's needed
+                    'volume': rounded_volume,  # Use rounded volume
                     'partial': True
                 })
-                volume_accumulated += remaining_needed
+                volume_accumulated += rounded_volume
                 break  # We've reached target
 
         return positions_to_close

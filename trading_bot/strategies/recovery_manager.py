@@ -150,9 +150,18 @@ class RecoveryManager:
             comment = pos.get('comment', '')
 
             # Try to identify parent position from comment
-            # Format: "Grid L1 - 12345" or "DCA L2 - 12345" or "Hedge - 12345"
+            # Old format: "Grid L1 - 12345" or "DCA L2 - 12345" or "Hedge - 12345"
+            # New format: "G1-12345" or "D2-12345" or "H-12345"
             parent_ticket = None
-            if ' - ' in comment:
+
+            # Try new format first (G1-12345, D2-12345, H-12345)
+            if '-' in comment and any(comment.startswith(prefix) for prefix in ['G', 'D', 'H']):
+                try:
+                    parent_ticket = int(comment.split('-')[-1])
+                except (ValueError, IndexError):
+                    pass
+            # Fall back to old format (Grid L1 - 12345)
+            elif ' - ' in comment:
                 try:
                     parent_ticket = int(comment.split(' - ')[-1])
                 except (ValueError, IndexError):
@@ -163,7 +172,12 @@ class RecoveryManager:
                 # This is a recovery order for an already-tracked parent
                 position = self.tracked_positions[parent_ticket]
 
-                if 'Grid' in comment:
+                # Detect recovery type from comment (old or new format)
+                is_grid = 'Grid' in comment or comment.startswith('G')
+                is_dca = 'DCA' in comment or comment.startswith('D')
+                is_hedge = 'Hedge' in comment or comment.startswith('H')
+
+                if is_grid:
                     # Add to grid levels
                     level_num = len(position['grid_levels']) + 1
                     position['grid_levels'].append({
@@ -175,7 +189,7 @@ class RecoveryManager:
                     position['total_volume'] += volume
                     print(f"   🔗 Linked Grid L{level_num} (#{ticket}) to parent #{parent_ticket}")
 
-                elif 'DCA' in comment:
+                elif is_dca:
                     # Add to DCA levels
                     level_num = len(position['dca_levels']) + 1
                     position['dca_levels'].append({
@@ -188,7 +202,7 @@ class RecoveryManager:
                     position['total_volume'] += volume
                     print(f"   🔗 Linked DCA L{level_num} (#{ticket}) to parent #{parent_ticket}")
 
-                elif 'Hedge' in comment:
+                elif is_hedge:
                     # Add to hedges
                     hedge_type = 'sell' if position_type == 'buy' else 'buy'
                     position['hedge_tickets'].append({
@@ -327,7 +341,7 @@ class RecoveryManager:
                 'volume': grid_volume,
                 'level': len(position['grid_levels']),  # Current level number
                 'pips': pips_moved,  # Pips moved against position
-                'comment': f'Grid L{len(position["grid_levels"])} - {ticket}'
+                'comment': f'G{len(position["grid_levels"])}-{ticket}'  # Shortened format
             }
 
         return None
@@ -408,7 +422,7 @@ class RecoveryManager:
                 'volume': hedge_volume,
                 'ratio': HEDGE_RATIO,  # Hedge ratio (e.g., 5.0x)
                 'trigger_pips': pips_underwater,  # Pips underwater when triggered
-                'comment': f'Hedge - {ticket}'
+                'comment': f'H-{ticket}'  # Shortened format
             }
 
         return None
@@ -511,7 +525,7 @@ class RecoveryManager:
                 'level': len(position['dca_levels']),  # Current DCA level
                 'price': current_price,  # Entry price for this DCA level
                 'total_volume': position['total_volume'],  # Total stack volume after adding DCA
-                'comment': f'DCA L{len(position["dca_levels"])} - {ticket}'
+                'comment': f'D{len(position["dca_levels"])}-{ticket}'  # Shortened format
             }
 
         return None

@@ -48,6 +48,26 @@ def round_volume_to_step(volume: float, step: float = 0.01, min_lot: float = 0.0
     return round(rounded, 2)
 
 
+def normalize_position_type(pos_type) -> str:
+    """
+    Normalize position type to string ('buy' or 'sell')
+
+    Handles both MT5 integer types (0=buy, 1=sell) and string types.
+
+    Args:
+        pos_type: Position type (int or str)
+
+    Returns:
+        str: 'buy' or 'sell'
+    """
+    if isinstance(pos_type, str):
+        return pos_type.lower()
+    elif isinstance(pos_type, int):
+        return 'buy' if pos_type == 0 else 'sell'
+    else:
+        raise ValueError(f"Invalid position type: {pos_type} (type: {type(pos_type)})")
+
+
 class RecoveryManager:
     """Manage recovery strategies: Grid, Hedge, DCA/Martingale"""
 
@@ -123,7 +143,7 @@ class RecoveryManager:
             # Extract position details
             symbol = pos['symbol']
             entry_price = pos['price_open']
-            position_type = 'buy' if pos['type'] == 0 else 'sell'
+            position_type = normalize_position_type(pos['type'])  # Safe type conversion
             volume = pos['volume']
 
             # Check if this looks like a recovery position (from comment)
@@ -260,25 +280,12 @@ class RecoveryManager:
         else:
             pips_moved = (current_price - entry_price) / pip_value
 
-        # 🔍 DIAGNOSTIC LOGGING
-        print(f"\n[GRID DIAGNOSTIC] Ticket: {ticket}")
-        print(f"  Entry: {entry_price:.5f} | Current: {current_price:.5f}")
-        print(f"  Pip value: {pip_value}")
-        print(f"  Price diff: {abs(current_price - entry_price):.5f}")
-        print(f"  Pips moved: {pips_moved:.2f}")
-        print(f"  Grid spacing: {GRID_SPACING_PIPS} pips")
-        print(f"  Current grid levels: {len(position['grid_levels'])}")
-
         # Check if underwater
         if pips_moved <= 0:
-            print(f"  ⏸️  Not underwater - no grid needed")
             return None
 
         # Calculate expected grid levels
         expected_levels = int(pips_moved / GRID_SPACING_PIPS) + 1
-
-        print(f"  Expected grid levels: {expected_levels}")
-        print(f"  Condition: {expected_levels} > {len(position['grid_levels'])} + 1 = {expected_levels > len(position['grid_levels']) + 1}")
 
         # Need to add grid level?
         if expected_levels > len(position['grid_levels']) + 1:  # +1 for original position
@@ -357,16 +364,6 @@ class RecoveryManager:
             pips_underwater = (entry_price - current_price) / pip_value
         else:
             pips_underwater = (current_price - entry_price) / pip_value
-
-        # 🔍 DIAGNOSTIC LOGGING
-        print(f"\n[HEDGE DIAGNOSTIC] Ticket: {ticket}")
-        print(f"  Entry: {entry_price:.5f} | Current: {current_price:.5f}")
-        print(f"  Pip value: {pip_value}")
-        print(f"  Price diff: {abs(current_price - entry_price):.5f}")
-        print(f"  Pips underwater: {pips_underwater:.2f}")
-        print(f"  Hedge trigger: {HEDGE_TRIGGER_PIPS} pips")
-        print(f"  Current hedges: {len(position['hedge_tickets'])}/{MAX_HEDGES_PER_POSITION}")
-        print(f"  Condition: {pips_underwater:.2f} >= {HEDGE_TRIGGER_PIPS} = {pips_underwater >= HEDGE_TRIGGER_PIPS}")
 
         # Update max underwater
         if pips_underwater > position['max_underwater_pips']:

@@ -90,6 +90,16 @@ class ConfluenceStrategy:
         print("=" * 80)
         print()
 
+        # Validate symbol list
+        if not symbols:
+            print("❌ Error: No symbols specified for trading")
+            print("   Please provide at least one symbol (e.g., EURUSD)")
+            return
+
+        if not isinstance(symbols, list):
+            print("❌ Error: Symbols must be provided as a list")
+            return
+
         # Get account info
         account_info = self.mt5.get_account_info()
         if not account_info:
@@ -135,9 +145,26 @@ class ConfluenceStrategy:
         print()
 
         self.running = True
+        initial_equity = account_info['equity']
+        circuit_breaker_threshold = initial_equity * 0.5  # Stop if equity drops below 50%
 
         try:
             while self.running:
+                # Circuit breaker: Check equity before each iteration
+                current_account = self.mt5.get_account_info()
+                if current_account and current_account['equity'] < circuit_breaker_threshold:
+                    print("\n" + "=" * 80)
+                    print("🚨 CIRCUIT BREAKER TRIGGERED")
+                    print("=" * 80)
+                    print(f"   Initial equity: ${initial_equity:.2f}")
+                    print(f"   Current equity: ${current_account['equity']:.2f}")
+                    print(f"   Loss: ${initial_equity - current_account['equity']:.2f} ({((initial_equity - current_account['equity'])/initial_equity * 100):.1f}%)")
+                    print(f"   Threshold: ${circuit_breaker_threshold:.2f} (50% of starting)")
+                    print("   STOPPING BOT TO PREVENT FURTHER LOSSES")
+                    print("=" * 80)
+                    self.running = False
+                    break
+
                 # Main trading loop
                 self._trading_loop(symbols)
 
@@ -277,8 +304,6 @@ class ConfluenceStrategy:
                     pip_value = point * 10
                 else:
                     pip_value = point
-
-                print(f"[PIP DEBUG] {symbol}: point={point}, digits={digits}, pip_value={pip_value}")
 
                 recovery_actions = self.recovery_manager.check_all_recovery_triggers(
                     ticket, current_price, pip_value

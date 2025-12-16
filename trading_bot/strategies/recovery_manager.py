@@ -20,6 +20,8 @@ from config.strategy_config import (
     DCA_TRIGGER_PIPS,
     DCA_MAX_LEVELS,
     DCA_MULTIPLIER,
+    DCA_MAX_TOTAL_EXPOSURE,
+    DCA_MAX_DRAWDOWN_PIPS,
 )
 
 
@@ -344,6 +346,11 @@ class RecoveryManager:
         else:
             pips_moved = (current_price - entry_price) / pip_value
 
+        # Check if drawdown exceeds safety limit
+        if DCA_MAX_DRAWDOWN_PIPS and pips_moved >= DCA_MAX_DRAWDOWN_PIPS:
+            print(f"⚠️  DCA blocked for {ticket}: Max drawdown reached ({pips_moved:.1f} >= {DCA_MAX_DRAWDOWN_PIPS} pips)")
+            return None
+
         # Check if underwater enough
         if pips_moved < DCA_TRIGGER_PIPS:
             return None
@@ -362,6 +369,20 @@ class RecoveryManager:
 
             # Round to broker step size (0.01)
             dca_volume = round_volume_to_step(dca_volume)
+
+            # Check if adding this DCA would exceed total exposure limit
+            if DCA_MAX_TOTAL_EXPOSURE:
+                # Calculate current DCA exposure
+                current_dca_exposure = sum(level['volume'] for level in position['dca_levels'])
+                new_total_dca_exposure = current_dca_exposure + dca_volume
+
+                if new_total_dca_exposure > DCA_MAX_TOTAL_EXPOSURE:
+                    print(f"⚠️  DCA blocked for {ticket}: Max total exposure reached")
+                    print(f"   Current DCA exposure: {current_dca_exposure:.2f} lots")
+                    print(f"   Proposed DCA volume: {dca_volume:.2f} lots")
+                    print(f"   Would total: {new_total_dca_exposure:.2f} lots")
+                    print(f"   Limit: {DCA_MAX_TOTAL_EXPOSURE:.2f} lots")
+                    return None
 
             # Add to tracked levels
             position['dca_levels'].append({

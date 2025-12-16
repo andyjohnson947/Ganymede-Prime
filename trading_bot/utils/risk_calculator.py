@@ -2,7 +2,8 @@
 Risk Management and Position Sizing
 Based on discovered parameters:
 - Risk: 1% per trade
-- Max total exposure: 5.04 lots
+- Max total exposure: 23.0 lots (scaled for 0.08 base + 8-level DCA)
+- Max DCA exposure: 6.0 lots per position
 - Max drawdown: 10%
 """
 

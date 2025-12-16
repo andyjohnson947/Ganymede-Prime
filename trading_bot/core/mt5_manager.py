@@ -206,6 +206,49 @@ class MT5Manager:
 
         return result
 
+    def get_all_positions(self, symbol: Optional[str] = None) -> List[Dict]:
+        """
+        Get all open positions (including those from other bots/manual trades)
+
+        Unlike get_positions(), this does NOT filter by magic number.
+        Use for position adoption during crash recovery.
+
+        Args:
+            symbol: Optional symbol to filter positions
+
+        Returns:
+            List of position dictionaries
+        """
+        if not self.connected:
+            return []
+
+        if symbol:
+            positions = mt5.positions_get(symbol=symbol)
+        else:
+            positions = mt5.positions_get()
+
+        if positions is None:
+            return []
+
+        result = []
+        for pos in positions:
+            result.append({
+                'ticket': pos.ticket,
+                'symbol': pos.symbol,
+                'type': pos.type,  # Raw MT5 type (0=buy, 1=sell)
+                'volume': pos.volume,
+                'price_open': pos.price_open,
+                'price_current': pos.price_current,
+                'profit': pos.profit,
+                'sl': pos.sl,
+                'tp': pos.tp,
+                'time': datetime.fromtimestamp(pos.time),
+                'comment': pos.comment,
+                'magic': pos.magic  # Include magic number for filtering
+            })
+
+        return result
+
     def place_order(
         self,
         symbol: str,

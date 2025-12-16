@@ -111,18 +111,24 @@ class ConfluenceStrategy:
         print("=" * 80)
         print("🔄 CRASH RECOVERY: Adopting existing positions")
         print("=" * 80)
-        existing_positions = self.mt5.get_positions()
-        if existing_positions:
-            print(f"Found {len(existing_positions)} open position(s) in MT5")
-            adopted = self.recovery_manager.adopt_existing_positions(
-                existing_positions,
-                magic_number=MT5_MAGIC_NUMBER
-            )
-            if adopted > 0:
-                print(f"✅ Successfully adopted {adopted} position(s)")
-                print("   All positions now protected with Grid/Hedge/DCA recovery")
+        all_positions = self.mt5.get_all_positions()  # Get ALL positions, not filtered by magic
+        if all_positions:
+            print(f"Found {len(all_positions)} open position(s) in MT5")
+            # Filter to only our trading symbols
+            symbol_positions = [p for p in all_positions if p['symbol'] in symbols]
+            if symbol_positions:
+                print(f"   {len(symbol_positions)} position(s) match trading symbols: {', '.join(symbols)}")
+                adopted = self.recovery_manager.adopt_existing_positions(
+                    symbol_positions,
+                    magic_number=None  # Adopt ALL positions for our symbols, regardless of magic number
+                )
+                if adopted > 0:
+                    print(f"✅ Successfully adopted {adopted} position(s)")
+                    print("   All positions now protected with Grid/Hedge/DCA recovery")
+                else:
+                    print("ℹ️  All positions are recovery orders (already linked to parents)")
             else:
-                print("ℹ️  No bot positions found (magic number mismatch or recovery orders only)")
+                print(f"ℹ️  No positions found for symbols: {', '.join(symbols)}")
         else:
             print("ℹ️  No existing positions to adopt")
         print("=" * 80)

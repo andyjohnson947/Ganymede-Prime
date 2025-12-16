@@ -130,7 +130,7 @@ DCA_ENABLED = True
 DCA_TRIGGER_PIPS = 10  # OPTIMIZED: Trigger every 10 pips (from analysis)
 DCA_MAX_LEVELS = 8  # OPTIMIZED: 8 levels proven (100% success in 4/4 sequences)
 DCA_MULTIPLIER = 1.49  # OPTIMIZED: Conservative 1.49x (from 8-level analysis, was 2.0x)
-DCA_MAX_DRAWDOWN_PIPS = 70  # SAFETY: Emergency exit if drawdown exceeds 70 pips
+DCA_MAX_DRAWDOWN_PIPS = 100  # SAFETY: Allows full 8 levels (L8 @ 80 pips) + 20 pip buffer (was 70, blocked L7-L8)
 DCA_MAX_TOTAL_EXPOSURE = 6.0  # SAFETY: Scaled for 0.08 base to allow full 8 levels (0.08→L8 = 5.77 lots)
 
 # =============================================================================

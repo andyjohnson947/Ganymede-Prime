@@ -519,6 +519,9 @@ class ConfluenceStrategy:
         total_profit = self.recovery_manager.calculate_net_profit(original_ticket, all_positions) or 0.0
 
         closed_count = 0
+        failed_tickets = []
+
+        # First attempt to close all positions
         for ticket in stack_tickets:
             if self.mt5.close_position(ticket):
                 closed_count += 1
@@ -526,6 +529,21 @@ class ConfluenceStrategy:
                 print(f"   ✅ Closed #{ticket}")
             else:
                 print(f"   ❌ Failed to close #{ticket}")
+                failed_tickets.append(ticket)
+
+        # FIX 3: Retry failed closes once (prevents orphaned hedges from close failures)
+        if failed_tickets:
+            print(f"   🔄 Retrying {len(failed_tickets)} failed close(s)...")
+            time.sleep(1)  # Brief pause before retry
+
+            for ticket in failed_tickets:
+                if self.mt5.close_position(ticket):
+                    closed_count += 1
+                    self.stats['trades_closed'] += 1
+                    print(f"   ✅ Retry successful: #{ticket}")
+                    failed_tickets.remove(ticket)
+                else:
+                    print(f"   ❌ Retry failed: #{ticket}")
 
         # Record trade close with diagnostic module
         if parent_position:
@@ -545,6 +563,17 @@ class ConfluenceStrategy:
         self.recovery_manager.untrack_position(original_ticket)
 
         print(f"📦 Stack closed: {closed_count}/{len(stack_tickets)} positions")
+
+        # FIX 1: Immediate orphan cleanup - catch any positions that failed to close
+        # This prevents orphaned hedges from being adopted as new parents
+        if failed_tickets:
+            print(f"   ⚠️  {len(failed_tickets)} position(s) failed to close - flagged as orphans")
+
+        all_positions_after = self.mt5.get_positions()
+        if all_positions_after:
+            orphan_count = self.recovery_manager.close_orphaned_positions(self.mt5, all_positions_after)
+            if orphan_count > 0:
+                print(f"   🧹 Cleaned up {orphan_count} orphaned recovery trade(s)")
 
     def _execute_partial_close(
         self,

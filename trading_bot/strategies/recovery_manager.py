@@ -771,6 +771,45 @@ class RecoveryManager:
 
         return None
 
+    def is_orphaned_hedge(self, ticket: int, mt5_positions: List[Dict]) -> bool:
+        """
+        Check if a tracked position is an orphaned hedge
+
+        An orphaned hedge is a hedge position whose original parent has been closed,
+        leaving the hedge to fester and potentially spawn its own recovery trades.
+
+        Args:
+            ticket: Position ticket to check
+            mt5_positions: List of all current MT5 positions
+
+        Returns:
+            bool: True if this is an orphaned hedge, False otherwise
+        """
+        if ticket not in self.tracked_positions:
+            return False
+
+        # Find this position in MT5 positions to check its comment
+        position_comment = None
+        for pos in mt5_positions:
+            if pos['ticket'] == ticket:
+                position_comment = pos.get('comment', '')
+                break
+
+        if not position_comment:
+            return False
+
+        # Check if this position has a hedge comment pattern (H-XXXXX)
+        is_recovery, parent_ticket = self.is_recovery_position(position_comment)
+
+        if is_recovery and 'H-' in position_comment and parent_ticket:
+            # This is a hedge - check if parent still exists
+            parent_exists = parent_ticket in self.tracked_positions
+            if not parent_exists:
+                # Parent closed but hedge still tracked - this is an orphaned hedge
+                return True
+
+        return False
+
     def check_all_recovery_triggers(
         self,
         ticket: int,
@@ -795,6 +834,33 @@ class RecoveryManager:
 
         actions = []
 
+        # FIX 2: Check if this is an orphaned hedge - if so, use DCA-only with strict limits
+        if self.is_orphaned_hedge(ticket, all_positions):
+            print(f"🛡️  Orphaned hedge detected: #{ticket}")
+            print(f"   Using DCA-only recovery (no Grid, no Hedge)")
+            print(f"   Limits: Max 3 levels, 1.2x multiplier, close at breakeven")
+
+            # Only check DCA with stricter limits for orphaned hedges
+            dca_action = self.check_dca_trigger(ticket, current_price, pip_value)
+            if dca_action:
+                position = self.tracked_positions[ticket]
+
+                # Stricter limits for orphaned hedges
+                if len(position['dca_levels']) >= 3:  # Max 3 DCA levels (not 8)
+                    print(f"   ⚠️  Orphaned hedge max DCA levels reached (3/3)")
+                    return actions
+
+                # Check exposure limits
+                proposed_volume = dca_action.get('volume', 0.0)
+                can_add, reason = self.check_exposure_limits(ticket, proposed_volume, all_positions)
+                if can_add:
+                    actions.append(dca_action)
+                else:
+                    print(f"   ⚠️  DCA blocked for orphaned hedge {ticket}: {reason}")
+
+            return actions  # Return early - no Grid or Hedge for orphaned hedges
+
+        # Normal recovery for non-orphaned positions
         # Check grid
         grid_action = self.check_grid_trigger(ticket, current_price, pip_value)
         if grid_action:

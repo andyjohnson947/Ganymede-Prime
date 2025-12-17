@@ -231,6 +231,12 @@ class ConfluenceStrategy:
         """Manage existing positions for symbol"""
         positions = self.mt5.get_positions(symbol)
 
+        # ORPHAN DETECTION: Check for and close orphaned recovery trades
+        # This runs once per symbol check to prevent orphans from accumulating
+        all_positions = self.mt5.get_positions()
+        if all_positions:
+            self.recovery_manager.close_orphaned_positions(self.mt5, all_positions)
+
         for position in positions:
             ticket = position['ticket']
             comment = position.get('comment', '')
@@ -280,8 +286,11 @@ class ConfluenceStrategy:
 
                 print(f"[PIP DEBUG] {symbol}: point={point}, digits={digits}, pip_value={pip_value}")
 
+                # Get all positions for exposure limit checking
+                all_positions = self.mt5.get_positions()
+
                 recovery_actions = self.recovery_manager.check_all_recovery_triggers(
-                    ticket, current_price, pip_value
+                    ticket, current_price, pip_value, all_positions=all_positions
                 )
 
                 # Execute recovery actions
@@ -293,7 +302,7 @@ class ConfluenceStrategy:
 
                 # Get account info for profit target calculation
                 account_info = self.mt5.get_account_info()
-                all_positions = self.mt5.get_positions()
+                # Note: all_positions already fetched above for recovery trigger checks
 
                 # 0. Check partial close triggers (lock in profits incrementally)
                 if account_info and PARTIAL_CLOSE_ENABLED:
@@ -330,16 +339,15 @@ class ConfluenceStrategy:
                     self._close_recovery_stack(ticket)
                     continue
 
-            # 3. Check exit signal (VWAP reversion) - only for individual positions
+            # 3. Check exit signal (VWAP reversion) - close entire recovery stack
             if symbol in self.market_data_cache:
                 h1_data = self.market_data_cache[symbol]['h1']
                 should_exit = self.signal_detector.check_exit_signal(position, h1_data)
 
                 if should_exit:
                     print(f"🎯 Exit signal detected for {ticket} - VWAP reversion")
-                    if self.mt5.close_position(ticket):
-                        self.recovery_manager.untrack_position(ticket)
-                        self.stats['trades_closed'] += 1
+                    # Close entire stack (parent + all recovery trades)
+                    self._close_recovery_stack(ticket)
 
     def _check_for_signals(self, symbol: str):
         """Check for new entry signals"""
@@ -400,12 +408,13 @@ class ConfluenceStrategy:
         # Get current positions for validation
         positions = self.mt5.get_positions()
 
-        # Validate trade
+        # Validate trade (pass mt5 for emergency close if drawdown exceeded)
         can_trade, reason = self.risk_calculator.validate_trade(
             account_info=account_info,
             symbol_info=symbol_info,
             volume=volume,
-            current_positions=positions
+            current_positions=positions,
+            mt5_manager=self.mt5
         )
 
         if not can_trade:
@@ -546,6 +555,13 @@ class ConfluenceStrategy:
         volume = action['volume']
         comment = action['comment']
         original_ticket = action.get('original_ticket')
+
+        # DIRECTION VALIDATION: Ensure recovery trade direction is correct
+        is_valid, error_msg = self.recovery_manager.validate_recovery_direction(action)
+        if not is_valid:
+            print(f"❌ DIRECTION VALIDATION FAILED: {error_msg}")
+            print(f"   Blocking {action_type} trade to prevent direction mismatch bug")
+            return
 
         # Place order
         ticket = self.mt5.place_order(

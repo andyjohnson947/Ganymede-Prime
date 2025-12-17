@@ -22,6 +22,8 @@ from config.strategy_config import (
     DCA_MULTIPLIER,
     DCA_MAX_TOTAL_EXPOSURE,
     DCA_MAX_DRAWDOWN_PIPS,
+    MAX_TOTAL_LOTS,
+    MAX_STACK_EXPOSURE,
 )
 
 
@@ -129,17 +131,11 @@ class RecoveryManager:
             # Check if this looks like a recovery position (from comment)
             comment = pos.get('comment', '')
 
-            # Try to identify parent position from comment
-            # Format: "Grid L1 - 12345" or "DCA L2 - 12345" or "Hedge - 12345"
-            parent_ticket = None
-            if ' - ' in comment:
-                try:
-                    parent_ticket = int(comment.split(' - ')[-1])
-                except (ValueError, IndexError):
-                    pass
+            # Use the is_recovery_position helper to check
+            is_recovery, parent_ticket = self.is_recovery_position(comment)
 
             # If this is a recovery position, try to link to parent
-            if parent_ticket and parent_ticket in self.tracked_positions:
+            if is_recovery and parent_ticket and parent_ticket in self.tracked_positions:
                 # This is a recovery order for an already-tracked parent
                 position = self.tracked_positions[parent_ticket]
 
@@ -180,8 +176,13 @@ class RecoveryManager:
                     })
                     print(f"   🔗 Linked Hedge (#{ticket}) to parent #{parent_ticket}")
 
+            elif is_recovery and parent_ticket:
+                # ORPHAN PREVENTION: This is a recovery trade but parent not found
+                # DO NOT adopt as parent - this prevents recovery trades from spawning their own recovery!
+                print(f"   ⚠️  ORPHAN DETECTED: Recovery trade #{ticket} has no parent #{parent_ticket} - skipping adoption")
+
             else:
-                # This looks like an original/parent position - track it
+                # This looks like an original/parent position (no recovery markers) - track it
                 self.track_position(
                     ticket=ticket,
                     symbol=symbol,
@@ -198,6 +199,255 @@ class RecoveryManager:
         """Remove position from tracking"""
         if ticket in self.tracked_positions:
             del self.tracked_positions[ticket]
+
+    def get_total_exposure(self, all_positions: List[Dict]) -> float:
+        """
+        Calculate total exposure across all open positions
+
+        Args:
+            all_positions: List of all MT5 positions
+
+        Returns:
+            float: Total exposure in lots
+        """
+        total = 0.0
+        for pos in all_positions:
+            total += pos.get('volume', 0.0)
+        return total
+
+    def check_exposure_limits(
+        self,
+        ticket: int,
+        proposed_volume: float,
+        all_positions: List[Dict]
+    ) -> tuple[bool, str]:
+        """
+        Check if adding proposed volume would exceed exposure limits
+
+        Args:
+            ticket: Parent position ticket
+            proposed_volume: Volume of proposed recovery trade
+            all_positions: List of all MT5 positions
+
+        Returns:
+            Tuple of (can_add, reason)
+        """
+        # Check stack exposure limit
+        if ticket in self.tracked_positions:
+            position = self.tracked_positions[ticket]
+            current_stack_volume = position['total_volume']
+            new_stack_volume = current_stack_volume + proposed_volume
+
+            if new_stack_volume > MAX_STACK_EXPOSURE:
+                return False, f"Stack exposure limit: {new_stack_volume:.2f} > {MAX_STACK_EXPOSURE:.2f} lots"
+
+        # Check total exposure limit
+        current_total = self.get_total_exposure(all_positions)
+        new_total = current_total + proposed_volume
+
+        if new_total > MAX_TOTAL_LOTS:
+            return False, f"Total exposure limit: {new_total:.2f} > {MAX_TOTAL_LOTS:.2f} lots"
+
+        return True, "OK"
+
+    def is_recovery_position(self, comment: str) -> tuple[bool, Optional[int]]:
+        """
+        Check if a position is a recovery trade (Grid/Hedge/DCA)
+
+        Args:
+            comment: Position comment field
+
+        Returns:
+            Tuple of (is_recovery, parent_ticket)
+        """
+        if not comment:
+            return False, None
+
+        # Try new format first (G1-12345, D2-12345, H-12345)
+        if '-' in comment and any(comment.startswith(prefix) for prefix in ['G', 'D', 'H']):
+            try:
+                parent_ticket = int(comment.split('-')[-1])
+                return True, parent_ticket
+            except (ValueError, IndexError):
+                pass
+
+        # Fall back to old format (Grid L1 - 12345, DCA L2 - 12345, Hedge - 12345)
+        if ' - ' in comment and any(keyword in comment for keyword in ['Grid', 'DCA', 'Hedge']):
+            try:
+                parent_ticket = int(comment.split(' - ')[-1])
+                return True, parent_ticket
+            except (ValueError, IndexError):
+                pass
+
+        return False, None
+
+    def get_all_recovery_tickets(self, parent_ticket: int) -> List[int]:
+        """
+        Get all recovery trade tickets for a parent position
+
+        Args:
+            parent_ticket: Parent position ticket
+
+        Returns:
+            List of all recovery trade tickets
+        """
+        if parent_ticket not in self.tracked_positions:
+            return []
+
+        position = self.tracked_positions[parent_ticket]
+        tickets = []
+
+        # Collect grid tickets
+        for grid in position['grid_levels']:
+            if 'ticket' in grid:
+                tickets.append(grid['ticket'])
+
+        # Collect hedge tickets
+        for hedge in position['hedge_tickets']:
+            if 'ticket' in hedge:
+                tickets.append(hedge['ticket'])
+
+        # Collect DCA tickets
+        for dca in position['dca_levels']:
+            if 'ticket' in dca:
+                tickets.append(dca['ticket'])
+
+        return tickets
+
+    def detect_orphaned_positions(self, mt5_positions: List[Dict]) -> List[Dict]:
+        """
+        Detect orphaned recovery trades (parent no longer exists)
+
+        Args:
+            mt5_positions: List of all current MT5 positions
+
+        Returns:
+            List of orphaned position dicts with ticket and reason
+        """
+        orphans = []
+
+        for pos in mt5_positions:
+            ticket = pos['ticket']
+            comment = pos.get('comment', '')
+
+            # Check if this is a recovery position
+            is_recovery, parent_ticket = self.is_recovery_position(comment)
+
+            if is_recovery and parent_ticket:
+                # Check if parent exists in tracked positions
+                if parent_ticket not in self.tracked_positions:
+                    orphans.append({
+                        'ticket': ticket,
+                        'parent_ticket': parent_ticket,
+                        'reason': f'Parent #{parent_ticket} not tracked',
+                        'comment': comment,
+                        'symbol': pos['symbol'],
+                        'type': pos['type'],
+                        'volume': pos['volume'],
+                        'profit': pos.get('profit', 0.0)
+                    })
+                    continue
+
+                # Check if parent position still exists in MT5
+                parent_exists = any(p['ticket'] == parent_ticket for p in mt5_positions)
+                if not parent_exists:
+                    orphans.append({
+                        'ticket': ticket,
+                        'parent_ticket': parent_ticket,
+                        'reason': f'Parent #{parent_ticket} closed',
+                        'comment': comment,
+                        'symbol': pos['symbol'],
+                        'type': pos['type'],
+                        'volume': pos['volume'],
+                        'profit': pos.get('profit', 0.0)
+                    })
+
+        return orphans
+
+    def close_orphaned_positions(self, mt5_manager, mt5_positions: List[Dict]) -> int:
+        """
+        Detect and close all orphaned recovery trades
+
+        Args:
+            mt5_manager: MT5Manager instance for closing positions
+            mt5_positions: List of all current MT5 positions
+
+        Returns:
+            int: Number of orphans closed
+        """
+        orphans = self.detect_orphaned_positions(mt5_positions)
+
+        if not orphans:
+            return 0
+
+        print(f"\n{'='*80}")
+        print(f"🧹 ORPHAN CLEANUP: Found {len(orphans)} orphaned recovery trade(s)")
+        print(f"{'='*80}")
+
+        closed_count = 0
+        failed_count = 0
+
+        for orphan in orphans:
+            ticket = orphan['ticket']
+            parent_ticket = orphan['parent_ticket']
+            reason = orphan['reason']
+            profit = orphan['profit']
+
+            print(f"   Orphan #{ticket}: {reason} (P&L: ${profit:.2f})")
+
+            # Close the orphan
+            if mt5_manager.close_position(ticket):
+                closed_count += 1
+                print(f"   ✅ Closed orphan #{ticket}")
+            else:
+                failed_count += 1
+                print(f"   ❌ Failed to close orphan #{ticket}")
+
+        print(f"\n📊 Orphan Cleanup Results:")
+        print(f"   Closed: {closed_count} orphan(s)")
+        print(f"   Failed: {failed_count} orphan(s)")
+        print(f"{'='*80}\n")
+
+        return closed_count
+
+    def validate_recovery_direction(self, action: Dict) -> tuple[bool, str]:
+        """
+        Validate that recovery trade direction matches parent position
+
+        Args:
+            action: Recovery action dict with 'action', 'original_ticket', and 'type'
+
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        action_type = action.get('action')
+        original_ticket = action.get('original_ticket')
+        recovery_type = action.get('type')
+
+        if original_ticket not in self.tracked_positions:
+            return False, f"Parent position #{original_ticket} not tracked"
+
+        parent_position = self.tracked_positions[original_ticket]
+        parent_type = parent_position['type']
+
+        # Validate direction rules
+        if action_type == 'grid':
+            # Grid must match parent direction
+            if recovery_type != parent_type:
+                return False, f"Grid direction mismatch: parent={parent_type}, grid={recovery_type}"
+
+        elif action_type == 'dca':
+            # DCA must match parent direction
+            if recovery_type != parent_type:
+                return False, f"DCA direction mismatch: parent={parent_type}, dca={recovery_type}"
+
+        elif action_type == 'hedge':
+            # Hedge must be opposite to parent
+            expected_hedge = 'sell' if parent_type == 'buy' else 'buy'
+            if recovery_type != expected_hedge:
+                return False, f"Hedge direction mismatch: parent={parent_type}, hedge={recovery_type} (expected {expected_hedge})"
+
+        return True, "OK"
 
     def store_recovery_ticket(self, original_ticket: int, recovery_ticket: int, action_type: str):
         """
@@ -516,35 +766,56 @@ class RecoveryManager:
         self,
         ticket: int,
         current_price: float,
-        pip_value: float = 0.0001
+        pip_value: float = 0.0001,
+        all_positions: List[Dict] = None
     ) -> List[Dict]:
         """
-        Check all recovery mechanisms at once
+        Check all recovery mechanisms at once with exposure limit enforcement
 
         Args:
             ticket: Position ticket
             current_price: Current price
             pip_value: Pip value for symbol
+            all_positions: List of all MT5 positions (for exposure checking)
 
         Returns:
             List of recovery actions to take
         """
+        if all_positions is None:
+            all_positions = []
+
         actions = []
 
         # Check grid
         grid_action = self.check_grid_trigger(ticket, current_price, pip_value)
         if grid_action:
-            actions.append(grid_action)
+            # Check exposure limits before adding
+            proposed_volume = grid_action.get('volume', 0.0)
+            can_add, reason = self.check_exposure_limits(ticket, proposed_volume, all_positions)
+            if can_add:
+                actions.append(grid_action)
+            else:
+                print(f"⚠️  Grid blocked for {ticket}: {reason}")
 
         # Check hedge
         hedge_action = self.check_hedge_trigger(ticket, current_price, pip_value)
         if hedge_action:
-            actions.append(hedge_action)
+            proposed_volume = hedge_action.get('volume', 0.0)
+            can_add, reason = self.check_exposure_limits(ticket, proposed_volume, all_positions)
+            if can_add:
+                actions.append(hedge_action)
+            else:
+                print(f"⚠️  Hedge blocked for {ticket}: {reason}")
 
         # Check DCA
         dca_action = self.check_dca_trigger(ticket, current_price, pip_value)
         if dca_action:
-            actions.append(dca_action)
+            proposed_volume = dca_action.get('volume', 0.0)
+            can_add, reason = self.check_exposure_limits(ticket, proposed_volume, all_positions)
+            if can_add:
+                actions.append(dca_action)
+            else:
+                print(f"⚠️  DCA blocked for {ticket}: {reason}")
 
         return actions
 

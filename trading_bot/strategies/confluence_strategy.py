@@ -14,6 +14,7 @@ from strategies.recovery_manager import RecoveryManager
 from utils.risk_calculator import RiskCalculator
 from utils.config_reloader import reload_config, print_current_config
 from utils.position_reporter import PositionStatusReporter
+from diagnostics.diagnostic_module import DiagnosticModule
 from config.strategy_config import (
     SYMBOLS,
     TIMEFRAME,
@@ -63,6 +64,13 @@ class ConfluenceStrategy:
         self.recovery_manager = RecoveryManager()
         self.risk_calculator = RiskCalculator()
         self.position_reporter = PositionStatusReporter()
+
+        # Initialize diagnostic module for trading intelligence
+        self.diagnostic_module = DiagnosticModule(
+            mt5_manager=self.mt5,
+            recovery_manager=self.recovery_manager,
+            data_dir="data/diagnostics"
+        )
 
         self.running = False
         self.last_data_refresh = {}
@@ -144,6 +152,14 @@ class ConfluenceStrategy:
         print("=" * 80)
         print()
 
+        # Start diagnostic module for hourly analysis
+        print("=" * 80)
+        print("📊 DIAGNOSTIC MODULE")
+        print("=" * 80)
+        self.diagnostic_module.start()
+        print("=" * 80)
+        print()
+
         self.running = True
         initial_equity = account_info['equity']
         circuit_breaker_threshold = initial_equity * 0.5  # Stop if equity drops below 50%
@@ -183,6 +199,10 @@ class ConfluenceStrategy:
     def stop(self):
         """Stop the strategy"""
         self.running = False
+
+        # Stop diagnostic module
+        self.diagnostic_module.stop()
+
         print()
         print("=" * 80)
         print("📊 STRATEGY STATISTICS")
@@ -484,8 +504,19 @@ class ConfluenceStrategy:
         # Get all tickets in the stack
         stack_tickets = self.recovery_manager.get_all_stack_tickets(original_ticket)
 
+        # Get position data before closing for diagnostic recording
+        all_positions = self.mt5.get_positions()
+        parent_position = None
+        for pos in all_positions:
+            if pos['ticket'] == original_ticket:
+                parent_position = pos
+                break
+
         print(f"📦 Closing recovery stack for {original_ticket}")
         print(f"   Closing {len(stack_tickets)} positions...")
+
+        # Calculate total profit before closing
+        total_profit = self.recovery_manager.calculate_net_profit(original_ticket, all_positions) or 0.0
 
         closed_count = 0
         for ticket in stack_tickets:
@@ -495,6 +526,20 @@ class ConfluenceStrategy:
                 print(f"   ✅ Closed #{ticket}")
             else:
                 print(f"   ❌ Failed to close #{ticket}")
+
+        # Record trade close with diagnostic module
+        if parent_position:
+            trade_data = {
+                'ticket': original_ticket,
+                'symbol': parent_position['symbol'],
+                'type': 'buy' if parent_position['type'] == 0 else 'sell',
+                'volume': parent_position['volume'],
+                'profit': total_profit,
+                'open_time': parent_position.get('time', datetime.now()).isoformat() if isinstance(parent_position.get('time'), datetime) else str(parent_position.get('time', '')),
+                'close_time': datetime.now().isoformat(),
+                'stack_size': len(stack_tickets),
+            }
+            self.diagnostic_module.record_trade_close(trade_data)
 
         # Untrack the original position
         self.recovery_manager.untrack_position(original_ticket)
@@ -616,6 +661,18 @@ class ConfluenceStrategy:
             elif action_type == 'dca':
                 self.stats['dca_levels_added'] += 1
 
+            # Record recovery action with diagnostic module
+            recovery_data = {
+                'type': action_type,
+                'parent_ticket': original_ticket,
+                'recovery_ticket': ticket,
+                'symbol': symbol,
+                'volume': volume,
+                'level': action.get('level', 1),
+                'trigger_time': datetime.now().isoformat(),
+            }
+            self.diagnostic_module.record_recovery_action(recovery_data)
+
             # Log recovery action (if enabled)
             if LOG_RECOVERY_ACTIONS:
                 recovery_msg = self.position_reporter.format_recovery_action(
@@ -728,6 +785,9 @@ class ConfluenceStrategy:
 
         recovery_status = self.recovery_manager.get_all_positions_status()
 
+        # Get diagnostic status
+        diagnostic_status = self.diagnostic_module.get_current_status()
+
         return {
             'running': self.running,
             'account': account_info,
@@ -736,6 +796,7 @@ class ConfluenceStrategy:
             'recovery_status': recovery_status,
             'statistics': self.stats,
             'cached_symbols': list(self.market_data_cache.keys()),
+            'diagnostics': diagnostic_status,
         }
 
     def reload_config(self):

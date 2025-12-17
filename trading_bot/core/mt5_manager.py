@@ -70,6 +70,21 @@ class MT5Manager:
             self.connected = False
             print("✅ Disconnected from MT5")
 
+    def ensure_connection(self) -> bool:
+        """
+        Ensure MT5 is connected and re-connect if needed
+
+        Returns:
+            bool: True if connected, False otherwise
+        """
+        # Check if MT5 is actually initialized (not just our flag)
+        if not mt5.terminal_info():
+            # MT5 not initialized - try to reconnect
+            print("⚠️  MT5 connection lost - reconnecting...")
+            return self.connect()
+
+        return self.connected
+
     def get_account_info(self) -> Optional[Dict]:
         """
         Get current account information
@@ -77,7 +92,7 @@ class MT5Manager:
         Returns:
             Dict with account info or None
         """
-        if not self.connected:
+        if not self.ensure_connection():
             return None
 
         info = mt5.account_info()
@@ -113,7 +128,7 @@ class MT5Manager:
         Returns:
             DataFrame with OHLCV data or None
         """
-        if not self.connected:
+        if not self.ensure_connection():
             print("❌ Not connected to MT5")
             return None
 
@@ -173,7 +188,7 @@ class MT5Manager:
         Returns:
             List of position dictionaries
         """
-        if not self.connected:
+        if not self.ensure_connection():
             return []
 
         if symbol:
@@ -219,7 +234,7 @@ class MT5Manager:
         Returns:
             List of position dictionaries
         """
-        if not self.connected:
+        if not self.ensure_connection():
             return []
 
         if symbol:
@@ -274,7 +289,7 @@ class MT5Manager:
         Returns:
             Order ticket number or None if failed
         """
-        if not self.connected:
+        if not self.ensure_connection():
             print("❌ Not connected to MT5")
             return None
 
@@ -349,7 +364,7 @@ class MT5Manager:
         Returns:
             bool: True if closed successfully
         """
-        if not self.connected:
+        if not self.ensure_connection():
             print("❌ Not connected to MT5")
             return False
 
@@ -438,7 +453,7 @@ class MT5Manager:
         Returns:
             bool: True if modified successfully
         """
-        if not self.connected:
+        if not self.ensure_connection():
             print("❌ Not connected to MT5")
             return False
 

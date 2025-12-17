@@ -142,7 +142,7 @@ class ForensicAnalyzer:
         parent_deals = []
 
         for deal in self.deals:
-            if deal['entry'] != 0:  # Only entry deals (position opens)
+            if deal['entry'] == 0:  # Only entry deals (ENTRY_IN = 0 = position opens)
                 comment = deal.get('comment', '')
 
                 # Check if this is a recovery deal
@@ -199,16 +199,20 @@ class ForensicAnalyzer:
     def _extract_parent_ticket(self, comment: str) -> Optional[int]:
         """Extract parent ticket from comment"""
         # Try new format first (G1-12345, D2-12345, H-12345)
-        if '-' in comment:
+        # New format has single char prefix
+        if comment and len(comment) > 0 and comment[0] in ['G', 'D', 'H'] and '-' in comment:
             try:
-                return int(comment.split('-')[-1])
+                # For new format: "G1-12345" or "D2-12345" or "H-12345"
+                ticket_str = comment.split('-')[-1].strip()
+                return int(ticket_str)
             except (ValueError, IndexError):
                 pass
 
         # Try old format (Grid L1 - 12345)
         if ' - ' in comment:
             try:
-                return int(comment.split(' - ')[-1])
+                ticket_str = comment.split(' - ')[-1].strip()
+                return int(ticket_str)
             except (ValueError, IndexError):
                 pass
 
@@ -413,8 +417,8 @@ class ForensicAnalyzer:
         cumulative_profit = 0.0
         peak_profit = 0.0
 
-        print(f"{'Time':<20} {'Type':<8} {'Volume':<8} {'Profit':<10} {'Cum P/L':<12} {'Drawdown':<12} {'Comment':<30}")
-        print(f"{'-'*120}")
+        print(f"{'Time':<20} {'Type':<8} {'Volume':<8} {'Profit':<10} {'Cum P/L':<12} {'Drawdown':<20} {'Comment':<30}")
+        print(f"{'-'*130}")
 
         for deal in exit_deals:
             profit = deal['profit'] + deal.get('commission', 0) + deal.get('swap', 0)
@@ -428,12 +432,13 @@ class ForensicAnalyzer:
 
             comment = deal.get('comment', '')[:30]
 
+            drawdown_str = f"${drawdown:.2f} ({drawdown_pct:.1f}%)"
             print(f"{deal['time'].strftime('%Y-%m-%d %H:%M:%S'):<20} "
                   f"{deal['type'].upper():<8} "
                   f"{deal['volume']:<8.2f} "
                   f"${profit:<9.2f} "
                   f"${cumulative_profit:<11.2f} "
-                  f"${drawdown:.2f} ({drawdown_pct:.1f}%)"[:12] + " "*(12-len(f"${drawdown:.2f} ({drawdown_pct:.1f}%)")) +
+                  f"{drawdown_str:<20} "
                   f"{comment:<30}")
 
         print(f"\n📊 Summary:")

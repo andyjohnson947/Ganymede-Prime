@@ -149,6 +149,9 @@ USE_FIXED_LOT_SIZE = True
 # Maximum total exposure across all positions
 MAX_TOTAL_LOTS = 23.0  # AGGRESSIVE: Scaled for 8-level DCA (3 positions × ~6.6 lots max each = ~20 lots)
 
+# Maximum exposure per individual recovery stack (parent + all recovery trades)
+MAX_STACK_EXPOSURE = 7.0  # SAFETY: Prevents single position from spiraling (base 0.08 + grid + hedge + DCA ≤ 7.0)
+
 # Maximum drawdown before stopping
 MAX_DRAWDOWN_PERCENT = 10.0
 

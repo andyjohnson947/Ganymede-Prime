@@ -134,13 +134,15 @@ class RiskCalculator:
     def check_drawdown_limit(
         self,
         current_equity: float,
+        mt5_manager=None,
         update_peak: bool = True
     ) -> bool:
         """
-        Check if current drawdown exceeds limit (based on EQUITY)
+        Check if current drawdown exceeds limit and close all positions if exceeded
 
         Args:
             current_equity: Current account equity (includes unrealized P&L)
+            mt5_manager: MT5Manager instance (optional - if provided, will close positions)
             update_peak: Whether to update peak equity
 
         Returns:
@@ -158,12 +160,46 @@ class RiskCalculator:
         drawdown = self.calculate_drawdown(current_equity, self.peak_balance)
 
         if drawdown >= MAX_DRAWDOWN_PERCENT:
-            print(f"🛑 MAX DRAWDOWN REACHED!")
-            print(f"   Current: {drawdown:.2f}%")
+            print(f"\n{'='*80}")
+            print(f"🚨 CRITICAL: MAX DRAWDOWN LIMIT EXCEEDED")
+            print(f"{'='*80}")
+            print(f"   Current drawdown: {drawdown:.2f}%")
             print(f"   Limit: {MAX_DRAWDOWN_PERCENT:.2f}%")
             print(f"   Peak equity: ${self.peak_balance:.2f}")
             print(f"   Current equity: ${current_equity:.2f}")
-            print(f"   ⚠️  STOPPING ALL TRADING TO PROTECT ACCOUNT")
+            print(f"   Loss: ${self.peak_balance - current_equity:.2f}")
+
+            # EMERGENCY CLOSE: Close all open positions immediately
+            if mt5_manager:
+                print(f"\n🛑 EMERGENCY LIQUIDATION INITIATED")
+                print(f"   Closing ALL open positions to protect account...")
+                print(f"{'='*80}\n")
+
+                all_positions = mt5_manager.get_positions()
+                if all_positions:
+                    closed_count = 0
+                    failed_count = 0
+
+                    for position in all_positions:
+                        ticket = position['ticket']
+                        if mt5_manager.close_position(ticket):
+                            closed_count += 1
+                            print(f"   ✅ Closed position #{ticket}")
+                        else:
+                            failed_count += 1
+                            print(f"   ❌ Failed to close position #{ticket}")
+
+                    print(f"\n📊 Emergency Close Results:")
+                    print(f"   Closed: {closed_count} positions")
+                    print(f"   Failed: {failed_count} positions")
+                else:
+                    print(f"   ℹ️  No open positions to close")
+            else:
+                print(f"   ⚠️  MT5Manager not provided - cannot close positions automatically")
+
+            print(f"\n{'='*80}")
+            print(f"⛔ TRADING STOPPED - Manual intervention required")
+            print(f"{'='*80}\n")
             return False
 
         return True
@@ -225,7 +261,8 @@ class RiskCalculator:
         account_info: Dict,
         symbol_info: Dict,
         volume: float,
-        current_positions: List[Dict]
+        current_positions: List[Dict],
+        mt5_manager=None
     ) -> tuple[bool, str]:
         """
         Validate if trade can be placed
@@ -235,6 +272,7 @@ class RiskCalculator:
             symbol_info: Symbol information
             volume: Proposed lot size
             current_positions: Current open positions
+            mt5_manager: MT5Manager instance (optional - for emergency close)
 
         Returns:
             Tuple of (can_trade, reason)
@@ -249,9 +287,10 @@ class RiskCalculator:
             return False, "Max total exposure exceeded"
 
         # Check drawdown (use EQUITY not balance - includes unrealized P&L)
+        # Pass mt5_manager for emergency close if limit exceeded
         equity = account_info.get('equity', 0)
-        if not self.check_drawdown_limit(equity):
-            return False, "Max drawdown exceeded - TRADING STOPPED"
+        if not self.check_drawdown_limit(equity, mt5_manager=mt5_manager):
+            return False, "Max drawdown exceeded - EMERGENCY CLOSE INITIATED"
 
         # Check volume limits
         min_volume = symbol_info.get('volume_min', 0.01)

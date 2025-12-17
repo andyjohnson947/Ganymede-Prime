@@ -249,6 +249,54 @@ class MT5Manager:
 
         return result
 
+    def get_history_deals(
+        self,
+        date_from: datetime,
+        date_to: datetime,
+        symbol: Optional[str] = None
+    ) -> List[Dict]:
+        """
+        Get historical deals (closed trades) from MT5
+
+        Args:
+            date_from: Start date for history
+            date_to: End date for history
+            symbol: Optional symbol filter
+
+        Returns:
+            List of deal dictionaries
+        """
+        if not self.connected:
+            return []
+
+        # Get history deals
+        if symbol:
+            deals = mt5.history_deals_get(date_from, date_to, symbol=symbol)
+        else:
+            deals = mt5.history_deals_get(date_from, date_to)
+
+        if deals is None:
+            return []
+
+        result = []
+        for deal in deals:
+            result.append({
+                'ticket': deal.ticket,
+                'order': deal.order,
+                'time': deal.time,
+                'type': deal.type,
+                'entry': deal.entry,  # 0=IN, 1=OUT
+                'position_id': deal.position_id,
+                'volume': deal.volume,
+                'price': deal.price,
+                'profit': deal.profit,
+                'symbol': deal.symbol,
+                'comment': deal.comment,
+                'magic': deal.magic,
+            })
+
+        return result
+
     def place_order(
         self,
         symbol: str,

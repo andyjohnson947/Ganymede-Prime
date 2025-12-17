@@ -284,15 +284,28 @@ class RecoveryManager:
 
         Returns:
             Tuple of (is_recovery, parent_ticket)
+            Note: parent_ticket may be shortened (last 5 digits only)
         """
         if not comment:
             return False, None
 
-        # Try new format first (G1-12345, D2-12345, H-12345)
+        # Try new format first (G1-91276, D2-91276, H-91276) - shortened ticket
         if '-' in comment and any(comment.startswith(prefix) for prefix in ['G', 'D', 'H']):
             try:
-                parent_ticket = int(comment.split('-')[-1])
-                return True, parent_ticket
+                ticket_suffix = int(comment.split('-')[-1])
+
+                # If suffix is 5 digits or less, try to match against tracked positions
+                if ticket_suffix < 100000:  # Shortened format (last 5 digits)
+                    # Try to find matching parent in tracked positions
+                    for tracked_ticket in self.tracked_positions:
+                        if tracked_ticket % 100000 == ticket_suffix:
+                            return True, tracked_ticket
+                    # If no match found, return the suffix (orphan detection will handle it)
+                    return True, ticket_suffix
+                else:
+                    # Full ticket number (legacy format)
+                    return True, ticket_suffix
+
             except (ValueError, IndexError):
                 pass
 
@@ -582,7 +595,7 @@ class RecoveryManager:
                 'volume': grid_volume,
                 'level': len(position['grid_levels']),  # Current level number
                 'pips': pips_moved,  # Pips moved against position
-                'comment': f'G{len(position["grid_levels"])}-{ticket}'  # Shortened format
+                'comment': f'G{len(position["grid_levels"])}-{ticket % 100000}'  # Last 5 digits only
             }
 
         return None
@@ -663,7 +676,7 @@ class RecoveryManager:
                 'volume': hedge_volume,
                 'ratio': HEDGE_RATIO,  # Hedge ratio (e.g., 5.0x)
                 'trigger_pips': pips_underwater,  # Pips underwater when triggered
-                'comment': f'H-{ticket}'  # Shortened format
+                'comment': f'H-{ticket % 100000}'  # Last 5 digits only
             }
 
         return None
@@ -766,7 +779,7 @@ class RecoveryManager:
                 'level': len(position['dca_levels']),  # Current DCA level
                 'price': current_price,  # Entry price for this DCA level
                 'total_volume': position['total_volume'],  # Total stack volume after adding DCA
-                'comment': f'D{len(position["dca_levels"])}-{ticket}'  # Shortened format
+                'comment': f'D{len(position["dca_levels"])}-{ticket % 100000}'  # Last 5 digits only
             }
 
         return None

@@ -1,0 +1,5 @@
+# Ignore all diagnostic data files
+diagnostics/*.json
+
+# Keep directory structure
+!diagnostics/.gitkeep

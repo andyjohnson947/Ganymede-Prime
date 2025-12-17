@@ -155,7 +155,14 @@ class MarketAnalyzer:
 
     def _determine_regime(self, condition: Dict) -> str:
         """
-        Determine market regime
+        Determine market regime using ADX (matches trading strategy logic)
+
+        ADX-based regime classification:
+        - ADX < 20: Ranging (weak trend, mean reversion safe)
+        - ADX 20-25: Choppy/Weak trend (transitional)
+        - ADX >= 25: Trending (mean reversion blocked by strategy)
+
+        Uses price vs EMA to determine trend direction when trending.
 
         Returns:
             'trending_up', 'trending_down', 'ranging', or 'choppy'
@@ -163,21 +170,27 @@ class MarketAnalyzer:
         adx = condition['adx']
         slope = condition['ema_slope']
 
-        # Ranging market (low ADX)
+        # Ranging market (ADX < 20) - Mean reversion safe
         if adx < 20:
             return 'ranging'
 
-        # Choppy market (moderate ADX, unclear direction)
+        # Choppy/weak trend (ADX 20-25) - Transitional zone
         if 20 <= adx < 25:
             return 'choppy'
 
-        # Trending market (high ADX)
-        if slope > 0.0001:  # Positive slope
-            return 'trending_up'
-        elif slope < -0.0001:  # Negative slope
-            return 'trending_down'
-        else:
-            return 'ranging'
+        # Trending market (ADX >= 25) - Strategy blocks mean reversion here
+        # Use EMA slope to determine direction
+        if adx >= 25:
+            if slope > 0:
+                return 'trending_up'
+            elif slope < 0:
+                return 'trending_down'
+            else:
+                # ADX high but no clear direction - still trending (sideways)
+                return 'trending_sideways'
+
+        # Fallback
+        return 'ranging'
 
     def _default_condition(self) -> Dict:
         """Return default condition when insufficient data"""

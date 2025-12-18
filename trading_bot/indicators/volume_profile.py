@@ -242,6 +242,16 @@ class VolumeProfile:
         Returns:
             bool: True if price is at level
         """
+        # Handle pandas Series (convert to scalar)
+        if hasattr(level, 'iloc'):
+            if len(level) == 0:
+                return False
+            level = float(level.iloc[0])
+
+        # Handle None or invalid values
+        if level is None or (isinstance(level, float) and pd.isna(level)):
+            return False
+
         tolerance = abs(level * tolerance_pct)
         return abs(price - level) <= tolerance
 
@@ -260,7 +270,26 @@ class VolumeProfile:
         profile = self.calculate(data, lookback=lookback)
         swing_levels = self.calculate_swing_levels(data)
 
-        if not profile or profile['poc'] == 0:
+        # Check if profile is valid
+        if not profile:
+            return {
+                'at_poc': False,
+                'above_vah': False,
+                'below_val': False,
+                'at_hvn': False,
+                'at_lvn': False,
+                'at_swing_high': False,
+                'at_swing_low': False,
+                'profile': profile,
+                'swing_levels': swing_levels
+            }
+
+        # Extract POC and handle Series
+        poc = profile.get('poc', 0)
+        if hasattr(poc, 'iloc'):
+            poc = float(poc.iloc[0]) if len(poc) > 0 else 0
+
+        if poc == 0:
             return {
                 'at_poc': False,
                 'above_vah': False,
@@ -275,8 +304,18 @@ class VolumeProfile:
 
         # Check signals
         at_poc = self.check_at_level(price, profile['poc'])
-        above_vah = price > profile['vah']
-        below_val = price < profile['val']
+
+        # Extract VAH/VAL and handle Series
+        vah = profile.get('vah', 0)
+        val = profile.get('val', 0)
+
+        if hasattr(vah, 'iloc'):
+            vah = float(vah.iloc[0]) if len(vah) > 0 else 0
+        if hasattr(val, 'iloc'):
+            val = float(val.iloc[0]) if len(val) > 0 else 0
+
+        above_vah = price > vah if vah != 0 else False
+        below_val = price < val if val != 0 else False
 
         # Check HVN levels
         at_hvn = False

@@ -215,32 +215,52 @@ class SignalDetector:
                 # STOP LOSS: At the confluence level that was broken through
                 signal['stop_loss'] = breakout['broken_level']
 
-                # TAKE PROFIT: 3R from entry (or 2R for weaker confluence)
+                # Calculate risk distance
                 risk_distance = abs(price - breakout['broken_level'])
-                reward_ratio = 3.0 if signal['confluence_score'] >= 7 else 2.0
-                signal['reward_ratio'] = reward_ratio
 
-                if signal['direction'] == 'buy':
-                    signal['take_profit'] = price + (risk_distance * reward_ratio)
+                # Get symbol info for minimum distance check
+                symbol_info = self.htf_levels.volume_profile  # Just need any indicator that has access
+                # Assume standard forex pair with 5 decimals = 0.0001 per pip
+                min_pips = 10  # Minimum 10 pips risk distance
+                point = 0.00001 if 'JPY' not in symbol else 0.001
+                pip = point * 10
+                min_risk_distance = min_pips * pip
+
+                # Reject if risk distance too small (less than 10 pips)
+                if risk_distance < min_risk_distance:
+                    logger.info(
+                        f"⏸️  Breakout REJECTED - Risk too small | {symbol} | "
+                        f"Risk: {risk_distance / pip:.1f} pips (min: {min_pips} pips) | "
+                        f"Entry: {price:.5f} | SL: {breakout['broken_level']:.5f}"
+                    )
+                    # Fall through to mean reversion instead
+                    signal['strategy_mode'] = 'mean_reversion'
                 else:
-                    signal['take_profit'] = price - (risk_distance * reward_ratio)
+                    # TAKE PROFIT: 3R from entry (or 2R for weaker confluence)
+                    reward_ratio = 3.0 if signal['confluence_score'] >= 7 else 2.0
+                    signal['reward_ratio'] = reward_ratio
 
-                broken_through_str = ' → '.join(breakout['broken_through'])
-                logger.info(
-                    f"BREAKOUT DETECTED | {symbol} | "
-                    f"Direction: {signal['direction'].upper()} | "
-                    f"Broke through: {broken_through_str} | "
-                    f"Entry: {price:.5f} | SL: {signal['stop_loss']:.5f} | "
-                    f"TP: {signal['take_profit']:.5f} ({reward_ratio}R)"
-                )
+                    if signal['direction'] == 'buy':
+                        signal['take_profit'] = price + (risk_distance * reward_ratio)
+                    else:
+                        signal['take_profit'] = price - (risk_distance * reward_ratio)
 
-                # Log breakout signal
-                logger.log_signal({
-                    'symbol': symbol,
-                    'direction': f"BREAKOUT_{signal['direction'].upper()}",
-                    'confluence_score': signal['confluence_score'],
-                    'factors': signal['factors'] + [f"Broke: {', '.join(breakout['broken_through'])}"]
-                })
+                    broken_through_str = ' → '.join(breakout['broken_through'])
+                    logger.info(
+                        f"BREAKOUT DETECTED | {symbol} | "
+                        f"Direction: {signal['direction'].upper()} | "
+                        f"Broke through: {broken_through_str} | "
+                        f"Entry: {price:.5f} | SL: {signal['stop_loss']:.5f} | "
+                        f"TP: {signal['take_profit']:.5f} ({reward_ratio}R)"
+                    )
+
+                    # Log breakout signal
+                    logger.log_signal({
+                        'symbol': symbol,
+                        'direction': f"BREAKOUT_{signal['direction'].upper()}",
+                        'confluence_score': signal['confluence_score'],
+                        'factors': signal['factors'] + [f"Broke: {', '.join(breakout['broken_through'])}"]
+                    })
             else:
                 # MEAN REVERSION MODE (default)
                 signal['strategy_mode'] = 'mean_reversion'

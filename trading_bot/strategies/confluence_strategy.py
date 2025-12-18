@@ -587,21 +587,45 @@ class ConfluenceStrategy:
             }
             self.diagnostic_module.record_trade_close(trade_data)
 
-        # Untrack the original position
-        self.recovery_manager.untrack_position(original_ticket)
-
         print(f"📦 Stack closed: {closed_count}/{len(stack_tickets)} positions")
 
-        # FIX 1: Immediate orphan cleanup - catch any positions that failed to close
-        # This prevents orphaned hedges from being adopted as new parents
-        if failed_tickets:
-            print(f"   ⚠️  {len(failed_tickets)} position(s) failed to close - flagged as orphans")
-
+        # CRITICAL: Verify all positions actually closed before untracking
         all_positions_after = self.mt5.get_positions()
+        still_open = []
         if all_positions_after:
-            orphan_count = self.recovery_manager.close_orphaned_positions(self.mt5, all_positions_after)
+            for ticket in stack_tickets:
+                if any(pos['ticket'] == ticket for pos in all_positions_after):
+                    still_open.append(ticket)
+                    print(f"   ⚠️  Position #{ticket} still open despite close command!")
+
+        # If any positions failed to close, try force close
+        if still_open:
+            print(f"   🔨 FORCE CLOSE: Attempting to close {len(still_open)} positions that survived...")
+            for ticket in still_open:
+                # Get current position to check if it's still there
+                pos_still_there = any(p['ticket'] == ticket for p in self.mt5.get_positions() or [])
+                if pos_still_there:
+                    # Try close with multiple attempts
+                    for attempt in range(3):
+                        if self.mt5.close_position(ticket):
+                            print(f"   ✅ Force closed #{ticket} on attempt {attempt + 1}")
+                            still_open.remove(ticket)
+                            break
+                        time.sleep(0.5)
+                    else:
+                        print(f"   ❌ CRITICAL: Position #{ticket} could not be force closed - will become orphan")
+
+        # Only untrack parent AFTER confirming all positions closed
+        if not still_open:
+            self.recovery_manager.untrack_position(original_ticket)
+            print(f"   ✅ Parent #{original_ticket} untracked - all stack positions confirmed closed")
+        else:
+            # DO NOT untrack if positions still open - this prevents orphan adoption
+            print(f"   ⚠️  Parent #{original_ticket} kept tracked - {len(still_open)} positions still open")
+            # Immediate orphan cleanup for the positions that failed
+            orphan_count = self.recovery_manager.close_orphaned_positions(self.mt5, self.mt5.get_positions())
             if orphan_count > 0:
-                print(f"   🧹 Cleaned up {orphan_count} orphaned recovery trade(s)")
+                print(f"   🧹 Emergency cleanup: closed {orphan_count} orphan(s)")
 
     def _execute_partial_close(
         self,

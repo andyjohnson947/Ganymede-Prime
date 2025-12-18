@@ -171,7 +171,16 @@ class VWAP:
         vwap = row['vwap']
         vwap_std = row['vwap_std']
 
-        if pd.isna(vwap) or pd.isna(vwap_std):
+        # Convert to scalar if Series
+        if hasattr(price, 'iloc'):
+            price = float(price.iloc[0]) if len(price) > 0 else 0
+        if hasattr(vwap, 'iloc'):
+            vwap = float(vwap.iloc[0]) if len(vwap) > 0 else None
+        if hasattr(vwap_std, 'iloc'):
+            vwap_std = float(vwap_std.iloc[0]) if len(vwap_std) > 0 else None
+
+        # Check for NaN after ensuring scalar
+        if vwap is None or vwap_std is None or pd.isna(vwap) or pd.isna(vwap_std):
             return {
                 'in_band_1': False,
                 'in_band_2': False,

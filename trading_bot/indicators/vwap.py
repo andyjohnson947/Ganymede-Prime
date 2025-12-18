@@ -229,4 +229,9 @@ class VWAP:
             raise ValueError("VWAP not calculated. Call calculate() first.")
 
         vwap = data.iloc[index]['vwap']
-        return vwap if not pd.isna(vwap) else 0
+
+        # Convert to scalar if Series
+        if hasattr(vwap, 'iloc'):
+            vwap = float(vwap.iloc[0]) if len(vwap) > 0 else 0
+
+        return vwap if (vwap is not None and not pd.isna(vwap)) else 0

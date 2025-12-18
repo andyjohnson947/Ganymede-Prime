@@ -7,7 +7,10 @@ import pandas as pd
 import numpy as np
 from typing import Tuple, Dict
 
-from config.strategy_config import VWAP_PERIOD, VWAP_BAND_MULTIPLIERS
+try:
+    from trading_bot.config.strategy_config import VWAP_PERIOD, VWAP_BAND_MULTIPLIERS
+except ModuleNotFoundError:
+    from config.strategy_config import VWAP_PERIOD, VWAP_BAND_MULTIPLIERS
 
 
 class VWAP:
@@ -34,16 +37,22 @@ class VWAP:
         """
         df = data.copy()
 
+        # Determine volume column name (MT5 uses 'tick_volume')
+        volume_col = 'tick_volume' if 'tick_volume' in df.columns else 'volume'
+
+        if volume_col not in df.columns:
+            raise ValueError("No volume data available (need 'volume' or 'tick_volume' column)")
+
         # Typical price
         df['typical_price'] = (df['high'] + df['low'] + df['close']) / 3
 
         # Volume-weighted typical price
-        df['vwtp'] = df['typical_price'] * df['volume']
+        df['vwtp'] = df['typical_price'] * df[volume_col]
 
         # Rolling VWAP
         df['vwap'] = (
             df['vwtp'].rolling(window=self.period).sum() /
-            df['volume'].rolling(window=self.period).sum()
+            df[volume_col].rolling(window=self.period).sum()
         )
 
         # Calculate standard deviation for bands
@@ -71,7 +80,10 @@ class VWAP:
             Series with VWAP standard deviation
         """
         typical_price = (df['high'] + df['low'] + df['close']) / 3
-        volume = df['volume']
+
+        # Determine volume column name (MT5 uses 'tick_volume')
+        volume_col = 'tick_volume' if 'tick_volume' in df.columns else 'volume'
+        volume = df[volume_col]
 
         # Rolling volume-weighted variance
         def weighted_std(prices, volumes):

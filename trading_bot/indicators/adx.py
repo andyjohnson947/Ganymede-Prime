@@ -187,6 +187,7 @@ def should_trade_based_on_trend(
 ) -> tuple[bool, str]:
     """
     Determine if we should trade based on trend analysis
+    STRICT FILTER: Only allows mean reversion trades in ranging markets (ADX < 25)
 
     Args:
         adx_value: Current ADX value
@@ -194,8 +195,8 @@ def should_trade_based_on_trend(
         minus_di: Current -DI value
         candle_data: Recent candle data
         candle_lookback: Number of candles to analyze
-        adx_threshold: ADX threshold for "trending" market
-        allow_weak_trends: Allow trading in weak trends (ADX 20-25)
+        adx_threshold: ADX threshold for "trending" market (default 25)
+        allow_weak_trends: Deprecated - strict mode always blocks trends
 
     Returns:
         Tuple of (should_trade, reason)
@@ -203,34 +204,15 @@ def should_trade_based_on_trend(
     # Get ADX interpretation
     adx_info = interpret_adx(adx_value, plus_di, minus_di)
 
-    # Get candle alignment
-    candle_info = analyze_candle_direction(candle_data, candle_lookback)
+    # STRICT RULE: Trending market (ADX >= 25) = NO TRADE
+    # Mean reversion is unsafe in trending conditions regardless of candle patterns
+    if adx_value >= adx_threshold:
+        return False, f"Trending market (ADX: {adx_value:.1f}) - Mean reversion blocked (threshold: {adx_threshold})"
 
-    # Rule 1: Strong trend (ADX > 40) = NO TRADE
-    if adx_value > 40:
-        return False, f"Strong trend detected (ADX: {adx_value:.1f}) - Mean reversion unsafe"
+    # Ranging/Weak market (ADX < 25) = TRADE
+    # These are ideal conditions for mean reversion
+    if adx_value < adx_threshold:
+        return True, f"Ranging market (ADX: {adx_value:.1f}) - Mean reversion safe"
 
-    # Rule 2: Moderate trend (ADX 25-40) + aligned candles = NO TRADE
-    if adx_value >= adx_threshold and candle_info['aligned']:
-        return False, f"Trending market (ADX: {adx_value:.1f}) + {candle_info['alignment']} candles - Mean reversion risky"
-
-    # Rule 3: Weak trend (ADX 20-25) = TRADE if candles not strongly aligned
-    if 20 <= adx_value < adx_threshold:
-        if candle_info['aligned']:
-            return False, f"Weak trend (ADX: {adx_value:.1f}) with aligned candles - Proceed with caution"
-        else:
-            if allow_weak_trends:
-                return True, f"Weak trend (ADX: {adx_value:.1f}) + mixed candles - OK to trade"
-            else:
-                return False, f"Weak trend detected (ADX: {adx_value:.1f}) - Trading disabled"
-
-    # Rule 4: Ranging market (ADX < 20) = TRADE
-    if adx_value < 20:
-        return True, f"Ranging market (ADX: {adx_value:.1f}) - Ideal for mean reversion"
-
-    # Rule 5: Moderate trend but candles NOT aligned = TRADE (trend may be weakening)
-    if adx_value >= adx_threshold and not candle_info['aligned']:
-        return True, f"Trend (ADX: {adx_value:.1f}) but mixed candles - Possible reversal"
-
-    # Default: Allow trade
-    return True, "Trend analysis passed"
+    # Default: Block (safety fallback)
+    return False, f"Trend filter - default block (ADX: {adx_value:.1f})"

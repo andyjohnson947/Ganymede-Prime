@@ -8,12 +8,20 @@ import pandas as pd
 import numpy as np
 from typing import Dict, List, Tuple
 
-from config.strategy_config import (
-    VP_BINS,
-    HVN_LEVELS,
-    LVN_LEVELS,
-    SWING_LOOKBACK
-)
+try:
+    from trading_bot.config.strategy_config import (
+        VP_BINS,
+        HVN_LEVELS,
+        LVN_LEVELS,
+        SWING_LOOKBACK
+    )
+except ModuleNotFoundError:
+    from config.strategy_config import (
+        VP_BINS,
+        HVN_LEVELS,
+        LVN_LEVELS,
+        SWING_LOOKBACK
+    )
 
 
 class VolumeProfile:
@@ -47,6 +55,12 @@ class VolumeProfile:
         if len(df) == 0:
             return self._empty_profile()
 
+        # Determine volume column name (MT5 uses 'tick_volume')
+        volume_col = 'tick_volume' if 'tick_volume' in df.columns else 'volume'
+
+        if volume_col not in df.columns:
+            return self._empty_profile()  # No volume data available
+
         # Get price range
         price_min = df['low'].min()
         price_max = df['high'].max()
@@ -65,7 +79,7 @@ class VolumeProfile:
             # Distribute volume across the price range of the candle
             candle_low = row['low']
             candle_high = row['high']
-            candle_volume = row['volume']
+            candle_volume = row[volume_col]
 
             # Find bins that overlap with this candle
             bin_indices = np.where((bins >= candle_low) & (bins <= candle_high))[0]

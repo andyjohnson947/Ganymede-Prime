@@ -70,6 +70,21 @@ class MT5Manager:
             self.connected = False
             print("✅ Disconnected from MT5")
 
+    def ensure_connection(self) -> bool:
+        """
+        Ensure MT5 is connected and re-connect if needed
+
+        Returns:
+            bool: True if connected, False otherwise
+        """
+        # Check if MT5 is actually initialized (not just our flag)
+        if not mt5.terminal_info():
+            # MT5 not initialized - try to reconnect
+            print("⚠️  MT5 connection lost - reconnecting...")
+            return self.connect()
+
+        return self.connected
+
     def get_account_info(self) -> Optional[Dict]:
         """
         Get current account information
@@ -77,7 +92,7 @@ class MT5Manager:
         Returns:
             Dict with account info or None
         """
-        if not self.connected:
+        if not self.ensure_connection():
             return None
 
         info = mt5.account_info()
@@ -113,7 +128,7 @@ class MT5Manager:
         Returns:
             DataFrame with OHLCV data or None
         """
-        if not self.connected:
+        if not self.ensure_connection():
             print("❌ Not connected to MT5")
             return None
 
@@ -173,7 +188,7 @@ class MT5Manager:
         Returns:
             List of position dictionaries
         """
-        if not self.connected:
+        if not self.ensure_connection():
             return []
 
         if symbol:
@@ -206,6 +221,49 @@ class MT5Manager:
 
         return result
 
+    def get_all_positions(self, symbol: Optional[str] = None) -> List[Dict]:
+        """
+        Get all open positions (including those from other bots/manual trades)
+
+        Unlike get_positions(), this does NOT filter by magic number.
+        Use for position adoption during crash recovery.
+
+        Args:
+            symbol: Optional symbol to filter positions
+
+        Returns:
+            List of position dictionaries
+        """
+        if not self.ensure_connection():
+            return []
+
+        if symbol:
+            positions = mt5.positions_get(symbol=symbol)
+        else:
+            positions = mt5.positions_get()
+
+        if positions is None:
+            return []
+
+        result = []
+        for pos in positions:
+            result.append({
+                'ticket': pos.ticket,
+                'symbol': pos.symbol,
+                'type': pos.type,  # Raw MT5 type (0=buy, 1=sell)
+                'volume': pos.volume,
+                'price_open': pos.price_open,
+                'price_current': pos.price_current,
+                'profit': pos.profit,
+                'sl': pos.sl,
+                'tp': pos.tp,
+                'time': datetime.fromtimestamp(pos.time),
+                'comment': pos.comment,
+                'magic': pos.magic  # Include magic number for filtering
+            })
+
+        return result
+
     def place_order(
         self,
         symbol: str,
@@ -231,7 +289,7 @@ class MT5Manager:
         Returns:
             Order ticket number or None if failed
         """
-        if not self.connected:
+        if not self.ensure_connection():
             print("❌ Not connected to MT5")
             return None
 
@@ -286,6 +344,8 @@ class MT5Manager:
 
         if result.retcode != mt5.TRADE_RETCODE_DONE:
             print(f"❌ Order failed: {result.comment}")
+            print(f"   Retcode: {result.retcode}")
+            print(f"   Request: {request}")
             return None
 
         print(f"✅ Order placed: {order_type.upper()} {volume} {symbol} @ {price}")
@@ -293,17 +353,18 @@ class MT5Manager:
 
         return result.order
 
-    def close_position(self, ticket: int) -> bool:
+    def close_position(self, ticket: int, volume: Optional[float] = None) -> bool:
         """
-        Close an open position
+        Close an open position (full or partial)
 
         Args:
             ticket: Position ticket number
+            volume: Volume to close (None = close entire position)
 
         Returns:
             bool: True if closed successfully
         """
-        if not self.connected:
+        if not self.ensure_connection():
             print("❌ Not connected to MT5")
             return False
 
@@ -317,7 +378,15 @@ class MT5Manager:
 
         # Prepare close request
         symbol = position.symbol
-        volume = position.volume
+        position_volume = position.volume
+
+        # Determine volume to close
+        if volume is None or volume >= position_volume:
+            close_volume = position_volume  # Close entire position
+            partial_close = False
+        else:
+            close_volume = volume  # Partial close
+            partial_close = True
 
         # Get symbol info to determine filling mode
         symbol_info = mt5.symbol_info(symbol)
@@ -339,13 +408,13 @@ class MT5Manager:
         request = {
             "action": mt5.TRADE_ACTION_DEAL,
             "symbol": symbol,
-            "volume": volume,
+            "volume": close_volume,
             "type": order_type,
             "position": ticket,
             "price": price,
             "deviation": 20,
             "magic": self.magic_number,
-            "comment": "Close by bot",
+            # Remove comment field - some brokers reject it on close orders
             "type_time": mt5.ORDER_TIME_GTC,
             "type_filling": filling_type,
         }
@@ -360,7 +429,11 @@ class MT5Manager:
             print(f"❌ Close failed: {result.comment}")
             return False
 
-        print(f"✅ Position closed: {ticket}")
+        if partial_close:
+            remaining = position_volume - close_volume
+            print(f"✅ Position partially closed: {ticket} ({close_volume}/{position_volume} lots, {remaining} remaining)")
+        else:
+            print(f"✅ Position closed: {ticket}")
         return True
 
     def modify_position(
@@ -380,7 +453,7 @@ class MT5Manager:
         Returns:
             bool: True if modified successfully
         """
-        if not self.connected:
+        if not self.ensure_connection():
             print("❌ Not connected to MT5")
             return False
 

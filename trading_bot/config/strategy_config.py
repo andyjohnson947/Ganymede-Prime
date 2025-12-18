@@ -7,8 +7,8 @@ All values extracted from 428 trades analyzed
 # TRADING PARAMETERS
 # =============================================================================
 
-# Symbols to trade
-SYMBOLS = []  # Will be loaded from analysis
+# Symbols to trade (from EA analysis - EURUSD primary pair)
+SYMBOLS = ['EURUSD']  # Add more symbols as needed: ['EURUSD', 'GBPUSD', 'USDJPY']
 
 # Primary timeframe for trading
 TIMEFRAME = 'H1'
@@ -108,7 +108,7 @@ SKIP_STRONG_TRENDS = True  # Never trade when ADX > 40
 GRID_ENABLED = True
 GRID_SPACING_PIPS = 8  # Tighter spacing: Trigger every 8 pips (was 10.8)
 MAX_GRID_LEVELS = 4  # More levels: Maximum 4 grid levels (was 2)
-GRID_LOT_SIZE = 0.03  # Stronger grid: 0.03 per level (was 0.01)
+GRID_LOT_SIZE = 0.08  # Matches base for clean partial closes (base + 4 grids = 0.40 lots max)
 
 # =============================================================================
 # HEDGING PARAMETERS (AGGRESSIVE RECOVERY SETTINGS)
@@ -120,20 +120,25 @@ HEDGE_RATIO = 5.0  # AGGRESSIVE: 5x overhedge for powerful counter-force (was 2.
 MAX_HEDGES_PER_POSITION = 1  # Only one hedge per original trade
 
 # =============================================================================
-# DCA/MARTINGALE PARAMETERS (AGGRESSIVE RECOVERY SETTINGS)
+# DCA/MARTINGALE PARAMETERS (OPTIMIZED FROM 413-TRADE ANALYSIS)
 # =============================================================================
+# Analysis Results: 17 DCA sequences, 82.4% success rate
+# Optimal depth: 8 levels (100% success, $98.91 avg profit)
+# Best sequence: 8 levels, $229.12 profit, 33 pips decline
 
 DCA_ENABLED = True
-DCA_TRIGGER_PIPS = 20  # Faster trigger: Start averaging down after 20 pips (was 25)
-DCA_MAX_LEVELS = 4  # More levels: 4 DCA levels max (was 2)
-DCA_MULTIPLIER = 2.0  # AGGRESSIVE: 2x martingale scaling (was 1.5x) - doubles each level
+DCA_TRIGGER_PIPS = 10  # OPTIMIZED: Trigger every 10 pips (from analysis)
+DCA_MAX_LEVELS = 8  # OPTIMIZED: 8 levels proven (100% success in 4/4 sequences)
+DCA_MULTIPLIER = 1.49  # OPTIMIZED: Conservative 1.49x (from 8-level analysis, was 2.0x)
+DCA_MAX_DRAWDOWN_PIPS = 100  # SAFETY: Allows full 8 levels (L8 @ 80 pips) + 20 pip buffer (was 70, blocked L7-L8)
+DCA_MAX_TOTAL_EXPOSURE = 6.0  # SAFETY: Scaled for 0.08 base to allow full 8 levels (0.08→L8 = 5.77 lots)
 
 # =============================================================================
 # RISK MANAGEMENT (AGGRESSIVE SETTINGS)
 # =============================================================================
 
 # Base lot size for initial positions
-BASE_LOT_SIZE = 0.03  # Increased from 0.01 to 0.03
+BASE_LOT_SIZE = 0.08  # Optimized for partial closes: 50% = 0.04, 25% = 0.02, 25% = 0.02
 
 # Risk per trade (if using dynamic position sizing)
 RISK_PERCENT = 1.0
@@ -142,7 +147,10 @@ RISK_PERCENT = 1.0
 USE_FIXED_LOT_SIZE = True
 
 # Maximum total exposure across all positions
-MAX_TOTAL_LOTS = 15.0  # AGGRESSIVE: Increased from 5.04 to accommodate larger recovery stacks
+MAX_TOTAL_LOTS = 23.0  # AGGRESSIVE: Scaled for 8-level DCA (3 positions × ~6.6 lots max each = ~20 lots)
+
+# Maximum exposure per individual recovery stack (parent + all recovery trades)
+MAX_STACK_EXPOSURE = 7.0  # SAFETY: Prevents single position from spiraling (base 0.08 + grid + hedge + DCA ≤ 7.0)
 
 # Maximum drawdown before stopping
 MAX_DRAWDOWN_PERCENT = 10.0
@@ -184,11 +192,52 @@ MAX_POSITIONS_PER_SYMBOL = 1  # Only 1 position per symbol at a time
 
 # Net profit target for recovery stacks
 # Close entire stack (original + grid + hedge + DCA) when combined P&L reaches this
-PROFIT_TARGET_PERCENT = 0.5  # AGGRESSIVE: 0.5% target (easier to hit with larger lots)
+PROFIT_TARGET_PERCENT = 1.0  # Target: ~$10 per trade at $1,023 account (1% of balance)
 
 # Time-based exit for stuck positions
 # Auto-close recovery stack after this many hours if still open
 MAX_POSITION_HOURS = 12  # AGGRESSIVE: 12 hours max (was 4) - gives recovery time to work
+
+# =============================================================================
+# PARTIAL CLOSE SETTINGS (Lock in Profits Incrementally)
+# =============================================================================
+
+# Enable/disable partial close mechanism
+PARTIAL_CLOSE_ENABLED = True  # Set to True to enable partial profit-taking
+
+# Partial close levels - close portions of stack at profit milestones
+# Each level specifies: trigger_percent (% of target profit) and close_percent (% of stack to close)
+PARTIAL_CLOSE_LEVELS = [
+    {'trigger_percent': 50, 'close_percent': 50},  # At 50% profit ($5), close 50% of stack (0.04 lots)
+    {'trigger_percent': 75, 'close_percent': 25},  # At 75% profit ($7.50), close 25% more (0.02 lots)
+    # Remaining 25% (0.02 lots) stays open until 100% target ($10) or time limit
+]
+
+# Example configurations for different strategies:
+#
+# Conservative (lock in profits early):
+# [
+#     {'trigger_percent': 30, 'close_percent': 40},
+#     {'trigger_percent': 50, 'close_percent': 30},
+#     {'trigger_percent': 75, 'close_percent': 20},
+# ]
+#
+# Aggressive (let more run):
+# [
+#     {'trigger_percent': 60, 'close_percent': 40},
+#     {'trigger_percent': 90, 'close_percent': 40},
+# ]
+#
+# No partial close (original behavior):
+# []
+
+# Close order strategy - determines which positions to close first
+# Options:
+#   'recovery_first': Close grid/DCA/hedge positions first, keep original trade last (recommended)
+#   'lifo': Close most recent positions first (Last In First Out)
+#   'fifo': Close oldest positions first (First In First Out)
+#   'largest_first': Close largest lot sizes first
+PARTIAL_CLOSE_ORDER = 'recovery_first'
 
 # =============================================================================
 # DATA MANAGEMENT
@@ -213,6 +262,16 @@ LOG_FILE = 'trading_bot.log'
 LOG_TRADES = True
 LOG_SIGNALS = True
 
+# Enhanced Position Status Logging
+STATUS_REPORT_ENABLED = True
+STATUS_REPORT_INTERVAL = 30  # Minutes between status reports
+LOG_RECOVERY_ACTIONS = True  # Log when grid/hedge/DCA levels are added
+LOG_EXIT_PROXIMITY = True    # Alert when approaching profit targets
+EXIT_PROXIMITY_PERCENT = 90  # Alert when this % of target reached
+CONCISE_FORMAT = True        # Use 3-5 lines per position (vs detailed)
+SHOW_MANAGEMENT_TREE = False # Show parent-child recovery trade tree (verbose, use when debugging)
+DETECT_ORPHANS = True        # Check for orphaned positions/recovery trades in status reports
+
 # =============================================================================
 # BACKTESTING
 # =============================================================================
@@ -221,6 +280,48 @@ BACKTEST_MODE = False
 BACKTEST_START_DATE = '2024-01-01'
 BACKTEST_END_DATE = '2024-12-31'
 BACKTEST_INITIAL_BALANCE = 10000
+
+# =============================================================================
+# SCALPING STRATEGY PARAMETERS
+# =============================================================================
+
+# Enable/disable scalping module
+SCALPING_ENABLED = False  # Set to True to activate scalping alongside confluence strategy
+
+# Scalping timeframe (M1 = 1 minute, M5 = 5 minutes)
+SCALP_TIMEFRAME = 'M1'  # Fast scalping on 1-minute charts
+
+# Scalping lot size (smaller than base for lower risk)
+SCALP_LOT_SIZE = 0.01  # Conservative 0.01 lots per scalp
+
+# Position limits
+SCALP_MAX_POSITIONS = 3  # Maximum concurrent scalping positions
+SCALP_MAX_POSITIONS_PER_SYMBOL = 1  # Only 1 scalp per symbol at a time
+
+# Signal detection parameters
+SCALP_MOMENTUM_PERIOD = 14  # RSI and Stochastic period
+SCALP_VOLUME_SPIKE_THRESHOLD = 1.5  # Volume must be 1.5x average for spike
+SCALP_BREAKOUT_LOOKBACK = 20  # Bars to look back for breakout levels
+SCALP_BARS_TO_FETCH = 100  # Historical bars to analyze
+
+# Exit management
+SCALP_MAX_HOLD_MINUTES = 10  # Force close after 10 minutes (scalps should be fast)
+SCALP_USE_TRAILING_STOP = True  # Enable trailing stop for profitable scalps
+SCALP_TRAILING_STOP_PIPS = 5  # Trail stop at 5 pips
+
+# Trading sessions (scalping works best during high volatility)
+SCALP_TRADING_SESSIONS = {
+    'london': {'start': '08:00', 'end': '12:00', 'enabled': True},  # London open
+    'new_york': {'start': '13:00', 'end': '17:00', 'enabled': True},  # NY open
+    'overlap': {'start': '13:00', 'end': '16:00', 'enabled': True},  # London/NY overlap (best)
+}
+
+# Check interval (how often to scan for signals)
+SCALP_CHECK_INTERVAL_SECONDS = 10  # Check every 10 seconds for M1
+
+# Risk-reward ratio (built into signal detector: 2:1 default)
+# Stop loss: 5-8 pips based on recent swing
+# Take profit: 10-16 pips (2x the stop loss)
 
 # =============================================================================
 # MT5 CONNECTION

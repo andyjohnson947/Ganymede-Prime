@@ -11,6 +11,7 @@ import time
 from core.mt5_manager import MT5Manager
 from strategies.signal_detector import SignalDetector
 from strategies.recovery_manager import RecoveryManager
+from strategies.stack_limiter import StackDrawdownLimiter
 from utils.risk_calculator import RiskCalculator
 from utils.config_reloader import reload_config, print_current_config
 from utils.position_reporter import PositionStatusReporter
@@ -33,6 +34,7 @@ from config.strategy_config import (
     SHOW_MANAGEMENT_TREE,
     DETECT_ORPHANS,
     MT5_MAGIC_NUMBER,
+    MAX_STACK_DRAWDOWN_USD,
 )
 
 # Import partial close config (if available)
@@ -62,6 +64,7 @@ class ConfluenceStrategy:
         self.mt5 = mt5_manager
         self.signal_detector = SignalDetector()
         self.recovery_manager = RecoveryManager()
+        self.stack_limiter = StackDrawdownLimiter(max_drawdown_usd=MAX_STACK_DRAWDOWN_USD)
         self.risk_calculator = RiskCalculator()
         self.position_reporter = PositionStatusReporter()
 
@@ -85,6 +88,11 @@ class ConfluenceStrategy:
             'hedges_activated': 0,
             'dca_levels_added': 0,
         }
+
+        # Circuit breaker for stack drawdown limit
+        self.trading_suspended = False
+        self.suspension_reason = None
+        self.suspension_time = None
 
     def start(self, symbols: List[str]):
         """
@@ -357,6 +365,9 @@ class ConfluenceStrategy:
                     for action in recovery_actions:
                         self._execute_recovery_action(action)
 
+                    # STACK DRAWDOWN LIMIT: Check if stack exceeded $100 loss limit
+                    self._check_stack_drawdown_limit(ticket, all_positions)
+
                 # Check exit conditions (for BOTH strategies - mean reversion AND breakout)
                 # Priority order: 0) Partial close, 1) Full profit target, 2) Time limit, 3) VWAP reversion
 
@@ -450,6 +461,13 @@ class ConfluenceStrategy:
         symbol = signal['symbol']
         direction = signal['direction']
         price = signal['price']
+
+        # Check if trading is suspended
+        if not self._check_trading_suspension(symbol):
+            print(f"🛑 Trading suspended for {symbol}")
+            print(f"   Reason: {self.suspension_reason}")
+            print(f"   Waiting for market to return to RANGING regime")
+            return
 
         # Get account and symbol info
         account_info = self.mt5.get_account_info()
@@ -779,6 +797,127 @@ class ConfluenceStrategy:
                     details=action
                 )
                 print(recovery_msg)
+
+    def _check_stack_drawdown_limit(self, ticket: int, all_positions: List[Dict]):
+        """
+        Check if stack has exceeded drawdown limit and take action
+
+        Args:
+            ticket: Parent position ticket
+            all_positions: All current MT5 positions
+        """
+        if ticket not in self.recovery_manager.tracked_positions:
+            return
+
+        # Calculate current stack P&L
+        current_pnl = self.recovery_manager.calculate_net_profit(ticket, all_positions)
+        if current_pnl is None:
+            return
+
+        # Check if recovery is active for this stack
+        tracked = self.recovery_manager.tracked_positions[ticket]
+        has_recovery = (
+            len(tracked.get('grid_levels', [])) > 0 or
+            len(tracked.get('hedge_tickets', [])) > 0 or
+            len(tracked.get('dca_levels', [])) > 0
+        )
+
+        # Get symbol for reporting
+        symbol = tracked.get('symbol', 'UNKNOWN')
+
+        # Check limit with smart recovery-aware logic
+        limit_check = self.stack_limiter.check_stack_limit(
+            ticket=ticket,
+            current_drawdown=current_pnl,
+            recovery_active=has_recovery,
+            symbol=symbol
+        )
+
+        status = limit_check['status']
+        action = limit_check['action']
+
+        # Log if in warning/critical zone
+        if status != 'safe':
+            print(f"\n{'='*80}")
+            print(f"⚠️  STACK DRAWDOWN LIMIT CHECK - {symbol} #{ticket}")
+            print(f"{'='*80}")
+            print(f"   Status: {status.upper().replace('_', ' ')}")
+            print(f"   {limit_check['message']}")
+
+        # Take action if needed
+        if action == 'close_stack':
+            print(f"\n🚨 EMERGENCY STACK CLOSE TRIGGERED")
+            print(f"   Reason: {limit_check.get('reason', 'limit_exceeded')}")
+            print(f"   Closing entire stack for #{ticket}...")
+
+            # Close the stack
+            self._close_recovery_stack(ticket)
+
+            # Reset stack tracking
+            self.stack_limiter.reset_stack(ticket)
+
+            # Suspend trading until market returns to ranging
+            self.trading_suspended = True
+            self.suspension_reason = f"Stack #{ticket} exceeded ${limit_check['current_loss']:.2f} limit"
+            self.suspension_time = datetime.now()
+
+            print(f"\n🛑 TRADING SUSPENDED")
+            print(f"   Reason: {self.suspension_reason}")
+            print(f"   Will resume when market regime returns to RANGING")
+            print(f"{'='*80}\n")
+
+        elif action == 'monitor':
+            print(f"   Action: Monitoring - recovery has room to work")
+            print(f"{'='*80}\n")
+
+    def _check_trading_suspension(self, symbol: str) -> bool:
+        """
+        Check if trading should resume based on market regime
+
+        Args:
+            symbol: Trading symbol to check
+
+        Returns:
+            bool: True if trading can proceed, False if still suspended
+        """
+        if not self.trading_suspended:
+            return True
+
+        # Check market regime for the symbol
+        if symbol not in self.market_data_cache:
+            return False
+
+        cache = self.market_data_cache[symbol]
+        h1_data = cache.get('h1')
+
+        if h1_data is None or h1_data.empty:
+            return False
+
+        # Analyze current market regime
+        from indicators.market_regime import MarketRegimeDetector
+        regime_detector = MarketRegimeDetector()
+        regime_info = regime_detector.detect_regime(h1_data)
+
+        current_regime = regime_info.get('regime', 'unknown')
+
+        # Resume trading if market is RANGING
+        if current_regime == 'ranging':
+            print(f"\n{'='*80}")
+            print(f"✅ TRADING SUSPENSION LIFTED")
+            print(f"{'='*80}")
+            print(f"   Market regime: {current_regime.upper()}")
+            print(f"   Suspended since: {self.suspension_time.strftime('%Y-%m-%d %H:%M:%S') if self.suspension_time else 'N/A'}")
+            print(f"   Previous reason: {self.suspension_reason}")
+            print(f"   Trading resuming for {symbol}...")
+            print(f"{'='*80}\n")
+
+            self.trading_suspended = False
+            self.suspension_reason = None
+            self.suspension_time = None
+            return True
+        else:
+            # Still trending - keep trading suspended
+            return False
 
     def _print_status_report(self):
         """Print periodic status report for all positions"""

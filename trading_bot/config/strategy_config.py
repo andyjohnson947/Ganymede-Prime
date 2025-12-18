@@ -152,6 +152,9 @@ MAX_TOTAL_LOTS = 23.0  # AGGRESSIVE: Scaled for 8-level DCA (3 positions × ~6.6
 # Maximum exposure per individual recovery stack (parent + all recovery trades)
 MAX_STACK_EXPOSURE = 7.0  # SAFETY: Prevents single position from spiraling (base 0.08 + grid + hedge + DCA ≤ 7.0)
 
+# Maximum dollar loss per recovery stack before emergency close
+MAX_STACK_DRAWDOWN_USD = 100.0  # SAFETY: $100 loss limit per stack - triggers stack close + trading suspension
+
 # Maximum drawdown before stopping
 MAX_DRAWDOWN_PERCENT = 10.0
 

@@ -696,13 +696,26 @@ class SignalDetector:
         for timeframe, levels_dict in htf_levels.items():
             if isinstance(levels_dict, dict):
                 for level_name, level_price in levels_dict.items():
-                    if level_price and not pd.isna(level_price):
-                        if abs(current_price - level_price) / current_price < 0.05:
-                            confluence_levels.append({
-                                'level': level_price,
-                                'factor': f"{timeframe}_{level_name}",
-                                'tolerance': level_price * (LEVEL_TOLERANCE_PCT / 100)
-                            })
+                    # Skip None values
+                    if level_price is None:
+                        continue
+
+                    # Handle pandas Series (convert to scalar)
+                    if hasattr(level_price, 'iloc'):
+                        if len(level_price) == 0:
+                            continue
+                        level_price = float(level_price.iloc[0])
+
+                    # Check if valid price
+                    if pd.isna(level_price):
+                        continue
+
+                    if abs(current_price - level_price) / current_price < 0.05:
+                        confluence_levels.append({
+                            'level': level_price,
+                            'factor': f"{timeframe}_{level_name}",
+                            'tolerance': level_price * (LEVEL_TOLERANCE_PCT / 100)
+                        })
 
         return confluence_levels
 
@@ -764,11 +777,24 @@ class SignalDetector:
         for timeframe, levels_dict in htf_levels.items():
             if isinstance(levels_dict, dict):
                 for level_name, level_price in levels_dict.items():
-                    if level_price and not pd.isna(level_price):
-                        if abs(current_price - level_price) / current_price < 0.003:  # Very close
-                            arrival_factors.append(f"{timeframe}_{level_name}")
-                            entry_level = level_price
-                            break
+                    # Skip None values
+                    if level_price is None:
+                        continue
+
+                    # Handle pandas Series (convert to scalar)
+                    if hasattr(level_price, 'iloc'):
+                        if len(level_price) == 0:
+                            continue
+                        level_price = float(level_price.iloc[0])
+
+                    # Check if valid price
+                    if pd.isna(level_price):
+                        continue
+
+                    if abs(current_price - level_price) / current_price < 0.003:  # Very close
+                        arrival_factors.append(f"{timeframe}_{level_name}")
+                        entry_level = level_price
+                        break
                 if arrival_factors:  # Break outer loop if found
                     break
 

@@ -20,6 +20,12 @@ from .market_analyzer import MarketAnalyzer
 from .performance_analyzer import PerformanceAnalyzer
 from .recovery_analyzer import RecoveryAnalyzer
 
+# Import advanced regime detector for Hurst + VHF tracking
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from indicators.advanced_regime_detector import AdvancedRegimeDetector
+
 
 class DiagnosticModule:
     """Main diagnostic module orchestrator - runs in background"""
@@ -38,7 +44,8 @@ class DiagnosticModule:
 
         # Components
         self.data_store = DataStore(data_dir)
-        self.market_analyzer = MarketAnalyzer()
+        self.market_analyzer = MarketAnalyzer()  # Legacy ADX-based analyzer
+        self.advanced_regime_detector = AdvancedRegimeDetector()  # Hurst + VHF analyzer
         self.performance_analyzer = PerformanceAnalyzer()
         self.recovery_analyzer = RecoveryAnalyzer()
 
@@ -154,11 +161,26 @@ class DiagnosticModule:
 
         for symbol in symbols:
             try:
-                # Get historical data
-                price_data = self.mt5.get_historical_data(symbol, 'H1', bars=100)
+                # Get historical data (need 100+ for Hurst calculation)
+                price_data = self.mt5.get_historical_data(symbol, 'H1', bars=150)
 
                 if price_data is not None:
+                    # Legacy analysis (ADX-based)
                     condition = self.market_analyzer.analyze_market_condition(price_data)
+
+                    # Advanced regime detection (Hurst + VHF)
+                    regime_info = self.advanced_regime_detector.detect_regime(price_data)
+                    is_safe, reason = self.advanced_regime_detector.is_safe_for_recovery(price_data)
+
+                    # Merge advanced metrics into condition
+                    condition['hurst_exponent'] = regime_info.get('hurst')
+                    condition['vhf'] = regime_info.get('vhf')
+                    condition['vhf_trend'] = regime_info.get('vhf_trend')
+                    condition['advanced_regime'] = regime_info.get('regime')
+                    condition['regime_confidence'] = regime_info.get('confidence')
+                    condition['recovery_safe'] = is_safe
+                    condition['recovery_reason'] = reason
+
                     market_analysis[symbol] = condition
 
                     # Record to data store
@@ -227,16 +249,36 @@ class DiagnosticModule:
                     'action': f"Review trading logic for {pattern.get('regime', 'unknown')} conditions",
                 })
 
-        # 2. Recovery-based recommendations
+        # 2. Recovery-based recommendations (ENHANCED with regime awareness)
         recovery_patterns = recovery_analysis.get('patterns', [])
         for pattern in recovery_patterns:
             if pattern.get('type') == 'low_effectiveness':
-                recommendations.append({
-                    'priority': 'medium',
-                    'category': 'recovery',
-                    'message': pattern['message'],
-                    'action': f"Consider adjusting {pattern['recovery_type'].upper()} parameters",
-                })
+                # Check if market regime is the issue (not recovery settings)
+                recovery_triggered_in_trending = False
+                for symbol, condition in market_analysis.items():
+                    # If Hurst shows trending or VHF shows trending
+                    hurst = condition.get('hurst_exponent', 0.5)
+                    vhf = condition.get('vhf', 0.3)
+                    if hurst > 0.55 or vhf > 0.40:
+                        recovery_triggered_in_trending = True
+                        break
+
+                if recovery_triggered_in_trending:
+                    # Problem is REGIME, not settings
+                    recommendations.append({
+                        'priority': 'high',
+                        'category': 'regime',
+                        'message': f"{pattern['recovery_type'].upper()} triggered in TRENDING market (H>{0.55} or VHF>{0.40})",
+                        'action': f"Hurst+VHF regime detection now active - will block {pattern['recovery_type'].upper()} in trends",
+                    })
+                else:
+                    # Problem might be settings
+                    recommendations.append({
+                        'priority': 'medium',
+                        'category': 'recovery',
+                        'message': pattern['message'],
+                        'action': f"Consider adjusting {pattern['recovery_type'].upper()} parameters",
+                    })
 
         # 3. Market-based recommendations
         for symbol, condition in market_analysis.items():
@@ -295,6 +337,21 @@ class DiagnosticModule:
         print(f"   Active stacks: {stack.get('total_stacks', 0)}")
         print(f"   Avg drawdown: ${stack.get('avg_max_drawdown', 0):.2f}")
         print(f"   Avg volume: {stack.get('avg_max_volume', 0):.2f} lots")
+
+        # Market regime (Hurst + VHF)
+        market = snapshot.get('market_conditions', {})
+        if market:
+            print(f"\n🌍 Market Regime (Hurst + VHF):")
+            for symbol, condition in market.items():
+                hurst = condition.get('hurst_exponent')
+                vhf = condition.get('vhf')
+                advanced_regime = condition.get('advanced_regime', 'unknown')
+                recovery_safe = condition.get('recovery_safe', False)
+
+                if hurst is not None and vhf is not None:
+                    status_icon = "✅" if recovery_safe else "⚠️"
+                    regime_text = advanced_regime.upper()
+                    print(f"   {status_icon} {symbol}: {regime_text} (H:{hurst:.2f}, VHF:{vhf:.2f}) - Recovery {'SAFE' if recovery_safe else 'BLOCKED'}")
 
         # Recommendations
         recs = snapshot['recommendations']

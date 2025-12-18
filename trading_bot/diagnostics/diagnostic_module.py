@@ -19,6 +19,7 @@ from .data_store import DataStore
 from .market_analyzer import MarketAnalyzer
 from .performance_analyzer import PerformanceAnalyzer
 from .recovery_analyzer import RecoveryAnalyzer
+from .confluence_analyzer import ConfluenceAnalyzer
 
 # Import advanced regime detector for Hurst + VHF tracking
 import sys
@@ -48,6 +49,7 @@ class DiagnosticModule:
         self.advanced_regime_detector = AdvancedRegimeDetector()  # Hurst + VHF analyzer
         self.performance_analyzer = PerformanceAnalyzer()
         self.recovery_analyzer = RecoveryAnalyzer()
+        self.confluence_analyzer = ConfluenceAnalyzer()  # Confluence signal analyzer
 
         # Threading
         self.running = False
@@ -133,12 +135,18 @@ class DiagnosticModule:
         recovery_analysis = self._analyze_recovery()
         snapshot['recovery'] = recovery_analysis
 
-        # 4. Generate insights and recommendations
+        # 4. Analyze confluence effectiveness
+        print("🎯 Analyzing confluence signals...")
+        confluence_analysis = self._analyze_confluence()
+        snapshot['confluence'] = confluence_analysis
+
+        # 5. Generate insights and recommendations
         print("💡 Generating recommendations...")
         recommendations = self._generate_recommendations(
             market_analysis,
             performance_analysis,
-            recovery_analysis
+            recovery_analysis,
+            confluence_analysis
         )
         snapshot['recommendations'] = recommendations
 
@@ -229,11 +237,26 @@ class DiagnosticModule:
 
         return effectiveness
 
+    def _analyze_confluence(self) -> Dict:
+        """Analyze confluence signal effectiveness"""
+        # Get recent trades
+        trades = self.data_store.get_trades(days=7)
+
+        # Analyze confluence effectiveness
+        effectiveness = self.confluence_analyzer.analyze_confluence_effectiveness(trades)
+
+        # Identify patterns
+        patterns = self.confluence_analyzer.identify_confluence_patterns(trades)
+        effectiveness['patterns'] = patterns
+
+        return effectiveness
+
     def _generate_recommendations(
         self,
         market_analysis: Dict,
         performance_analysis: Dict,
-        recovery_analysis: Dict
+        recovery_analysis: Dict,
+        confluence_analysis: Dict = None
     ) -> List[Dict]:
         """Generate actionable recommendations"""
         recommendations = []
@@ -308,6 +331,32 @@ class DiagnosticModule:
                     'action': "Review recent trades and consider tightening risk parameters",
                 })
 
+        # 5. Confluence-based recommendations
+        if confluence_analysis:
+            confluence_patterns = confluence_analysis.get('patterns', [])
+            for pattern in confluence_patterns:
+                if pattern.get('type') == 'high_score_underperforming':
+                    recommendations.append({
+                        'priority': 'medium',
+                        'category': 'confluence',
+                        'message': pattern['message'],
+                        'action': f"Review if high-score trades are entering in trending markets",
+                    })
+                elif pattern.get('type') == 'dominant_factor':
+                    recommendations.append({
+                        'priority': 'low',
+                        'category': 'confluence',
+                        'message': pattern['message'],
+                        'action': f"Consider prioritizing '{pattern['factor']}' in signal detection",
+                    })
+                elif pattern.get('type') in ['breakout_preference', 'mean_reversion_preference']:
+                    recommendations.append({
+                        'priority': 'low',
+                        'category': 'confluence',
+                        'message': pattern['message'],
+                        'action': "Strategy performance variance is normal - continue monitoring",
+                    })
+
         return recommendations
 
     def _print_summary(self, snapshot: Dict):
@@ -352,6 +401,40 @@ class DiagnosticModule:
                     status_icon = "✅" if recovery_safe else "⚠️"
                     regime_text = advanced_regime.upper()
                     print(f"   {status_icon} {symbol}: {regime_text} (H:{hurst:.2f}, VHF:{vhf:.2f}) - Recovery {'SAFE' if recovery_safe else 'BLOCKED'}")
+
+        # Confluence analysis
+        confluence = snapshot.get('confluence', {})
+        if confluence:
+            print(f"\n🎯 Confluence Performance (Last 7 days):")
+
+            # Performance by score
+            by_score = confluence.get('by_score', {})
+            if by_score:
+                print(f"   By Score:")
+                for score_range in ['4', '5', '6', '7+']:
+                    metrics = by_score.get(score_range, {})
+                    if metrics.get('total_trades', 0) > 0:
+                        print(f"      Score {score_range}: {metrics['win_rate']:.1f}% WR ({metrics['total_trades']} trades, ${metrics['total_profit']:.2f})")
+
+            # Strategy mode performance
+            by_strategy = confluence.get('by_strategy', {})
+            if by_strategy:
+                print(f"   By Strategy:")
+                for strategy in ['breakout', 'mean_reversion']:
+                    metrics = by_strategy.get(strategy, {})
+                    if metrics.get('total_trades', 0) > 0:
+                        strategy_name = strategy.replace('_', ' ').title()
+                        print(f"      {strategy_name}: {metrics['win_rate']:.1f}% WR ({metrics['total_trades']} trades, ${metrics['total_profit']:.2f})")
+
+            # Top performing stacks
+            top_stacks = confluence.get('top_stacks', [])
+            if top_stacks:
+                print(f"   Top Confluence Stacks:")
+                for i, stack in enumerate(top_stacks[:3], 1):
+                    factors_str = ', '.join(stack['factors'][:3])  # Show first 3 factors
+                    if len(stack['factors']) > 3:
+                        factors_str += f" +{len(stack['factors'])-3} more"
+                    print(f"      #{i}: {stack['win_rate']:.1f}% WR ({factors_str})")
 
         # Recommendations
         recs = snapshot['recommendations']

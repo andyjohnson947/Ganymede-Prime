@@ -91,6 +91,10 @@ class ConfluenceStrategy:
             'dca_levels_added': 0,
         }
 
+        # Store signal data for diagnostic tracking
+        # Maps ticket -> signal data (confluence factors, breakout info, etc.)
+        self.signal_data_by_ticket = {}
+
         # Circuit breaker for stack drawdown limit
         self.trading_suspended = False
         self.suspension_reason = None
@@ -576,6 +580,18 @@ class ConfluenceStrategy:
             self.stats['trades_opened'] += 1
             print(f"✅ Trade opened: Ticket {ticket}")
 
+            # Store signal data for diagnostic tracking
+            self.signal_data_by_ticket[ticket] = {
+                'confluence_score': signal.get('confluence_score', 0),
+                'confluence_factors': signal.get('factors', []),
+                'strategy_mode': strategy_mode,
+                'breakout_info': signal.get('breakout', {}),
+                'htf_signals': signal.get('htf_signals', {}),
+                'entry_time': datetime.now().isoformat(),
+                'symbol': symbol,
+                'direction': direction,
+            }
+
             # Start tracking for recovery
             self.recovery_manager.track_position(
                 ticket=ticket,
@@ -649,6 +665,19 @@ class ConfluenceStrategy:
                 'close_time': datetime.now().isoformat(),
                 'stack_size': len(stack_tickets),
             }
+
+            # Add confluence signal data if available
+            signal_data = self.signal_data_by_ticket.get(original_ticket, {})
+            if signal_data:
+                trade_data['confluence_score'] = signal_data.get('confluence_score', 0)
+                trade_data['confluence_factors'] = signal_data.get('confluence_factors', [])
+                trade_data['strategy_mode'] = signal_data.get('strategy_mode', 'unknown')
+                trade_data['breakout_info'] = signal_data.get('breakout_info', {})
+                trade_data['htf_signals'] = signal_data.get('htf_signals', {})
+
+                # Clean up stored signal data
+                del self.signal_data_by_ticket[original_ticket]
+
             self.diagnostic_module.record_trade_close(trade_data)
 
         print(f"📦 Stack closed: {closed_count}/{len(stack_tickets)} positions")

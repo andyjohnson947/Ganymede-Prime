@@ -59,7 +59,8 @@ class RecoveryManager:
         symbol: str,
         entry_price: float,
         position_type: str,
-        volume: float
+        volume: float,
+        metadata: dict = None
     ):
         """
         Start tracking a position for recovery
@@ -70,6 +71,7 @@ class RecoveryManager:
             entry_price: Entry price
             position_type: 'buy' or 'sell'
             volume: Initial lot size
+            metadata: Optional dict with additional tracking info (e.g., strategy_mode)
         """
         self.tracked_positions[ticket] = {
             'ticket': ticket,
@@ -84,6 +86,7 @@ class RecoveryManager:
             'max_underwater_pips': 0,
             'recovery_active': False,
             'open_time': datetime.now(),  # Track when position opened
+            'metadata': metadata or {},  # Store additional tracking info
         }
 
     def untrack_position(self, ticket: int):

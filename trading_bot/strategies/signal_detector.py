@@ -10,7 +10,8 @@ from datetime import datetime
 from indicators.vwap import VWAP
 from indicators.volume_profile import VolumeProfile
 from indicators.htf_levels import HTFLevels
-from indicators.adx import calculate_adx, should_trade_based_on_trend
+from indicators.adx import calculate_adx, should_trade_based_on_trend, detect_market_regime
+from indicators.atr import get_breakout_risk_levels
 from config.strategy_config import (
     MIN_CONFLUENCE_SCORE,
     CONFLUENCE_WEIGHTS,
@@ -164,6 +165,70 @@ class SignalDetector:
                 signal['reject_reason'] = trend_reason
                 return None  # Reject signal due to trend filter
 
+            # DUAL-MODE STRATEGY: Detect market regime for strategy selection
+            regime = detect_market_regime(
+                adx_value=adx_value,
+                plus_di=plus_di,
+                minus_di=minus_di,
+                candle_data=current_data,
+                candle_lookback=CANDLE_LOOKBACK,
+                adx_threshold=ADX_THRESHOLD
+            )
+
+            signal['regime'] = regime
+            signal['strategy_mode'] = regime['strategy']
+
+            # BREAKOUT MODE: In trending markets, flip direction and add ATR stops
+            if regime['strategy'] == 'breakout':
+                # Check if we have strong momentum for breakout
+                breakout_info = self.detect_breakout_momentum(current_data, signal['vwap_signals'])
+
+                if not breakout_info['is_breakout']:
+                    # No clear breakout momentum - skip trade
+                    signal['should_trade'] = False
+                    signal['reject_reason'] = (
+                        f"Trending market but no clear breakout momentum "
+                        f"(ADX: {adx_value:.1f}, Candles: {breakout_info['confidence']}/5)"
+                    )
+                    from utils.logger import logger
+                    logger.info(
+                        f"⏸️  Signal SKIPPED | {symbol} | "
+                        f"Trending market (ADX: {adx_value:.1f}) but insufficient breakout momentum | "
+                        f"Candle alignment: {breakout_info['confidence']}/5 | "
+                        f"Price: {signal['price']:.5f}"
+                    )
+                    return None
+
+                # FLIP DIRECTION for breakout - trade WITH momentum
+                if breakout_info['momentum'] == 'strong_bullish':
+                    signal['direction'] = 'buy'  # Buy WITH upward momentum
+                elif breakout_info['momentum'] == 'strong_bearish':
+                    signal['direction'] = 'sell'  # Sell WITH downward momentum
+
+                # Add ATR-based risk management for breakout trades
+                risk_levels = get_breakout_risk_levels(
+                    data=current_data,
+                    entry_price=signal['price'],
+                    direction=signal['direction'],
+                    atr_period=ADX_PERIOD,
+                    atr_multiplier=1.5,
+                    risk_reward_ratio=2.0
+                )
+
+                signal['breakout_risk'] = risk_levels
+                signal['stop_loss'] = risk_levels['stop_loss']
+                signal['take_profit'] = risk_levels['take_profit']
+
+                from utils.logger import logger
+                logger.info(
+                    f"🚀 BREAKOUT SIGNAL | {symbol} | "
+                    f"Direction: {signal['direction'].upper()} | "
+                    f"ADX: {adx_value:.1f} | Momentum: {breakout_info['momentum']} | "
+                    f"SL: {risk_levels['stop_loss']:.5f} ({risk_levels['risk_pips']:.1f} pips) | "
+                    f"TP: {risk_levels['take_profit']:.5f} ({risk_levels['reward_pips']:.1f} pips, 2R) | "
+                    f"Price: {signal['price']:.5f}"
+                )
+
         # 6. Finalize direction if not set
         if signal['should_trade'] and signal['direction'] is None:
             # Use VWAP position to determine direction
@@ -173,6 +238,73 @@ class SignalDetector:
                 signal['direction'] = 'sell'  # Price above VWAP, sell for reversion
 
         return signal if signal['should_trade'] else None
+
+    def detect_breakout_momentum(
+        self,
+        data: pd.DataFrame,
+        vwap_signals: Dict
+    ) -> Dict:
+        """
+        Detect if price is breaking out (momentum) vs mean reverting
+
+        Breakout conditions (trade WITH momentum):
+        - 4+ of last 5 candles aligned in same direction
+        - Candles moving AWAY from VWAP (not towards)
+
+        Args:
+            data: Price data with VWAP
+            vwap_signals: VWAP signal dict from get_signals()
+
+        Returns:
+            Dict with breakout analysis
+        """
+        # Get last 5 candles for momentum analysis
+        last_5 = data.tail(5)
+
+        # Count bullish vs bearish candles
+        bullish_candles = (last_5['close'] > last_5['open']).sum()
+        bearish_candles = (last_5['close'] < last_5['open']).sum()
+
+        # Determine momentum strength
+        if bullish_candles >= 4:  # 80%+ bullish
+            momentum = 'strong_bullish'
+            aligned = True
+            confidence = bullish_candles
+        elif bearish_candles >= 4:  # 80%+ bearish
+            momentum = 'strong_bearish'
+            aligned = True
+            confidence = bearish_candles
+        else:
+            momentum = 'mixed'
+            aligned = False
+            confidence = max(bullish_candles, bearish_candles)
+
+        # Check direction relative to VWAP
+        price_direction = vwap_signals['direction']  # 'above' or 'below'
+
+        # Determine if moving AWAY from VWAP (breakout) or TOWARDS (reversion)
+        if price_direction == 'below':
+            # Price below VWAP
+            # If bearish momentum → moving further DOWN (away from VWAP) = breakout
+            # If bullish momentum → moving UP towards VWAP = reversion
+            moving_away = (momentum == 'strong_bearish')
+        else:
+            # Price above VWAP
+            # If bullish momentum → moving further UP (away from VWAP) = breakout
+            # If bearish momentum → moving DOWN towards VWAP = reversion
+            moving_away = (momentum == 'strong_bullish')
+
+        # Breakout detected if candles aligned AND moving away from VWAP
+        is_breakout = aligned and moving_away
+
+        return {
+            'is_breakout': is_breakout,
+            'momentum': momentum,
+            'aligned': aligned,
+            'moving_away': moving_away,
+            'confidence': confidence,
+            'price_direction': price_direction
+        }
 
     def check_exit_signal(
         self,

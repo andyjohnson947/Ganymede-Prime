@@ -205,17 +205,26 @@ class ConfluenceStrategy:
 
             # Check recovery triggers (only for tracked original positions)
             if ticket in self.recovery_manager.tracked_positions:
-                current_price = position['price_current']
-                symbol_info = self.mt5.get_symbol_info(symbol)
-                pip_value = symbol_info.get('point', 0.0001)
+                # Check strategy mode - skip recovery for breakout trades (they have SL/TP)
+                tracked_info = self.recovery_manager.tracked_positions[ticket]
+                strategy_mode = tracked_info.get('metadata', {}).get('strategy_mode', 'mean_reversion')
 
-                recovery_actions = self.recovery_manager.check_all_recovery_triggers(
-                    ticket, current_price, pip_value
-                )
+                if strategy_mode == 'breakout':
+                    # Breakout trades rely on SL/TP, skip recovery mechanisms
+                    pass
+                else:
+                    # Mean reversion trades use recovery mechanisms
+                    current_price = position['price_current']
+                    symbol_info = self.mt5.get_symbol_info(symbol)
+                    pip_value = symbol_info.get('point', 0.0001)
 
-                # Execute recovery actions
-                for action in recovery_actions:
-                    self._execute_recovery_action(action)
+                    recovery_actions = self.recovery_manager.check_all_recovery_triggers(
+                        ticket, current_price, pip_value
+                    )
+
+                    # Execute recovery actions
+                    for action in recovery_actions:
+                        self._execute_recovery_action(action)
 
                 # Check exit conditions (only for tracked original positions)
                 # Priority order: 1) Profit target, 2) Time limit, 3) VWAP reversion
@@ -239,8 +248,12 @@ class ConfluenceStrategy:
                     self._close_recovery_stack(ticket)
                     continue
 
-            # 3. Check exit signal (VWAP reversion) - only for individual positions
-            if symbol in self.market_data_cache:
+            # 3. Check exit signal (VWAP reversion) - only for mean reversion trades
+            # Breakout trades rely on SL/TP, not VWAP reversion
+            tracked_info = self.recovery_manager.tracked_positions.get(ticket, {})
+            strategy_mode = tracked_info.get('metadata', {}).get('strategy_mode', 'mean_reversion')
+
+            if strategy_mode == 'mean_reversion' and symbol in self.market_data_cache:
                 h1_data = self.market_data_cache[symbol]['h1']
                 should_exit = self.signal_detector.check_exit_signal(position, h1_data)
 
@@ -321,15 +334,29 @@ class ConfluenceStrategy:
             print(f"❌ Trade validation failed: {reason}")
             return
 
-        # Place order
-        comment = f"Confluence:{signal['confluence_score']}"
+        # Place order with appropriate risk management based on strategy mode
+        strategy_mode = signal.get('strategy_mode', 'mean_reversion')
+
+        if strategy_mode == 'breakout':
+            # Breakout trades use ATR-based SL/TP
+            sl = signal.get('stop_loss')
+            tp = signal.get('take_profit')
+            comment = f"Breakout:{signal['confluence_score']}"
+            print(f"📊 Strategy: Breakout (ATR-based SL/TP)")
+            print(f"   SL: {sl:.5f} | TP: {tp:.5f} (2R)")
+        else:
+            # Mean reversion uses VWAP reversion (no hard SL/TP)
+            sl = None
+            tp = None
+            comment = f"Confluence:{signal['confluence_score']}"
+            print(f"📊 Strategy: Mean Reversion (VWAP-based exits)")
 
         ticket = self.mt5.place_order(
             symbol=symbol,
             order_type=direction,
             volume=volume,
-            sl=None,  # EA doesn't use hard stops
-            tp=None,  # Using VWAP reversion instead
+            sl=sl,
+            tp=tp,
             comment=comment
         )
 
@@ -343,7 +370,8 @@ class ConfluenceStrategy:
                 symbol=symbol,
                 entry_price=price,
                 position_type=direction,
-                volume=volume
+                volume=volume,
+                metadata={'strategy_mode': strategy_mode}  # Track strategy mode
             )
 
     def _close_recovery_stack(self, original_ticket: int):

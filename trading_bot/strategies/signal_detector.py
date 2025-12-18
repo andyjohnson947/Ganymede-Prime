@@ -650,18 +650,28 @@ class SignalDetector:
         confluence_levels = []
 
         # 1. VWAP bands
-        if 'vwap' in latest and not pd.isna(latest['vwap']):
+        if 'vwap' in latest.index:
             vwap = latest['vwap']
-            if 'vwap_std' in latest and not pd.isna(latest['vwap_std']):
-                std = latest['vwap_std']
-                confluence_levels.extend([
-                    {'level': vwap + std, 'factor': 'VWAP +1σ', 'tolerance': std * 0.2},
-                    {'level': vwap - std, 'factor': 'VWAP -1σ', 'tolerance': std * 0.2},
-                    {'level': vwap + (2 * std), 'factor': 'VWAP +2σ', 'tolerance': std * 0.2},
-                    {'level': vwap - (2 * std), 'factor': 'VWAP -2σ', 'tolerance': std * 0.2},
-                    {'level': vwap + (3 * std), 'factor': 'VWAP +3σ', 'tolerance': std * 0.2},
-                    {'level': vwap - (3 * std), 'factor': 'VWAP -3σ', 'tolerance': std * 0.2},
-                ])
+            # Convert to scalar if needed
+            if hasattr(vwap, 'iloc'):
+                vwap = float(vwap.iloc[0]) if len(vwap) > 0 else None
+
+            if vwap is not None and not pd.isna(vwap):
+                if 'vwap_std' in latest.index:
+                    std = latest['vwap_std']
+                    # Convert to scalar if needed
+                    if hasattr(std, 'iloc'):
+                        std = float(std.iloc[0]) if len(std) > 0 else None
+
+                    if std is not None and not pd.isna(std):
+                        confluence_levels.extend([
+                            {'level': vwap + std, 'factor': 'VWAP +1σ', 'tolerance': std * 0.2},
+                            {'level': vwap - std, 'factor': 'VWAP -1σ', 'tolerance': std * 0.2},
+                            {'level': vwap + (2 * std), 'factor': 'VWAP +2σ', 'tolerance': std * 0.2},
+                            {'level': vwap - (2 * std), 'factor': 'VWAP -2σ', 'tolerance': std * 0.2},
+                            {'level': vwap + (3 * std), 'factor': 'VWAP +3σ', 'tolerance': std * 0.2},
+                            {'level': vwap - (3 * std), 'factor': 'VWAP -3σ', 'tolerance': std * 0.2},
+                        ])
 
         # 2. Volume Profile levels
         for key, factor in [('poc', 'POC'), ('vah', 'VAH'), ('val', 'VAL')]:
@@ -742,20 +752,27 @@ class SignalDetector:
         entry_level = current_price
 
         # Check VWAP Band 3 (extreme deviation - strong reversal/continuation point)
-        if 'vwap' in latest and 'vwap_std' in latest:
+        if 'vwap' in latest.index and 'vwap_std' in latest.index:
             vwap = latest['vwap']
             std = latest['vwap_std']
 
-            band_3_upper = vwap + (3 * std)
-            band_3_lower = vwap - (3 * std)
-            tolerance = std * 0.3
+            # Convert to scalar if needed
+            if hasattr(vwap, 'iloc'):
+                vwap = float(vwap.iloc[0]) if len(vwap) > 0 else None
+            if hasattr(std, 'iloc'):
+                std = float(std.iloc[0]) if len(std) > 0 else None
 
-            if abs(current_price - band_3_upper) < tolerance:
-                arrival_factors.append('VWAP +3σ')
-                entry_level = band_3_upper
-            elif abs(current_price - band_3_lower) < tolerance:
-                arrival_factors.append('VWAP -3σ')
-                entry_level = band_3_lower
+            if vwap is not None and std is not None and not pd.isna(vwap) and not pd.isna(std):
+                band_3_upper = vwap + (3 * std)
+                band_3_lower = vwap - (3 * std)
+                tolerance = std * 0.3
+
+                if abs(current_price - band_3_upper) < tolerance:
+                    arrival_factors.append('VWAP +3σ')
+                    entry_level = band_3_upper
+                elif abs(current_price - band_3_lower) < tolerance:
+                    arrival_factors.append('VWAP -3σ')
+                    entry_level = band_3_lower
 
         # Check LVN (critical for breakouts - price gaps where momentum accelerates)
         if vp_signals.get('lvn_levels'):

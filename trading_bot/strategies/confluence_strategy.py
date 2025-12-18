@@ -226,6 +226,10 @@ class ConfluenceStrategy:
                     for action in recovery_actions:
                         self._execute_recovery_action(action)
 
+                # BREAKOUT TRADE: Check if we should move SL to breakeven
+                if strategy_mode == 'breakout':
+                    self._check_breakeven_for_breakout(ticket, position, tracked_info)
+
                 # Check exit conditions (only for tracked original positions)
                 # Priority order: 1) Profit target, 2) Time limit, 3) VWAP reversion
 
@@ -338,12 +342,13 @@ class ConfluenceStrategy:
         strategy_mode = signal.get('strategy_mode', 'mean_reversion')
 
         if strategy_mode == 'breakout':
-            # Breakout trades use ATR-based SL/TP
+            # Breakout trades use confluence level as SL, 3R TP
             sl = signal.get('stop_loss')
             tp = signal.get('take_profit')
+            reward_ratio = signal.get('reward_ratio', 3.0)
             comment = f"Breakout:{signal['confluence_score']}"
-            print(f"📊 Strategy: Breakout (ATR-based SL/TP)")
-            print(f"   SL: {sl:.5f} | TP: {tp:.5f} (2R)")
+            print(f"📊 Strategy: Breakout (Confluence-based SL/TP)")
+            print(f"   SL: {sl:.5f} | TP: {tp:.5f} ({reward_ratio}R)")
         else:
             # Mean reversion uses VWAP reversion (no hard SL/TP)
             sl = None
@@ -373,6 +378,64 @@ class ConfluenceStrategy:
                 volume=volume,
                 metadata={'strategy_mode': strategy_mode}  # Track strategy mode
             )
+
+    def _check_breakeven_for_breakout(self, ticket: int, position: Dict, tracked_info: Dict):
+        """
+        Check if we should move stop loss to breakeven for a breakout trade
+
+        Moves SL to breakeven (entry price) when price has moved halfway to take profit.
+        This protects profits and ensures we don't lose on a breakout trade.
+
+        Args:
+            ticket: Position ticket
+            position: Position dict from MT5
+            tracked_info: Tracked position info from recovery manager
+        """
+        # Check if breakeven already set
+        if tracked_info.get('breakeven_set', False):
+            return  # Already moved to breakeven
+
+        current_price = position['price_current']
+        entry_price = position['price_open']
+        position_type = position['type']
+        sl = position.get('sl', 0)
+        tp = position.get('tp', 0)
+
+        if not tp:
+            return  # No TP set, can't calculate breakeven trigger
+
+        # Calculate if price has moved halfway to TP
+        if position_type == 'buy':
+            # Buy position: check if price moved halfway up to TP
+            distance_to_tp = tp - entry_price
+            halfway_point = entry_price + (distance_to_tp / 2)
+
+            if current_price >= halfway_point and sl < entry_price:
+                # Move SL to breakeven (entry price)
+                success = self.mt5.modify_position(
+                    ticket=ticket,
+                    sl=entry_price,
+                    tp=tp
+                )
+                if success:
+                    tracked_info['breakeven_set'] = True
+                    print(f"🔒 Breakout #{ticket} - SL moved to breakeven @ {entry_price:.5f}")
+
+        else:  # sell position
+            # Sell position: check if price moved halfway down to TP
+            distance_to_tp = entry_price - tp
+            halfway_point = entry_price - (distance_to_tp / 2)
+
+            if current_price <= halfway_point and sl > entry_price:
+                # Move SL to breakeven (entry price)
+                success = self.mt5.modify_position(
+                    ticket=ticket,
+                    sl=entry_price,
+                    tp=tp
+                )
+                if success:
+                    tracked_info['breakeven_set'] = True
+                    print(f"🔒 Breakout #{ticket} - SL moved to breakeven @ {entry_price:.5f}")
 
     def _close_recovery_stack(self, original_ticket: int):
         """

@@ -165,69 +165,51 @@ class SignalDetector:
                 signal['reject_reason'] = trend_reason
                 return None  # Reject signal due to trend filter
 
-            # DUAL-MODE STRATEGY: Detect market regime for strategy selection
-            regime = detect_market_regime(
-                adx_value=adx_value,
-                plus_di=plus_di,
-                minus_di=minus_di,
-                candle_data=current_data,
-                candle_lookback=CANDLE_LOOKBACK,
-                adx_threshold=ADX_THRESHOLD
+            # BREAKOUT DETECTION: Check if price broke THROUGH a confluence zone
+            # This is ADDITIONAL to mean reversion - only triggers when price has momentum through levels
+            breakout = self.detect_confluence_breakout(
+                current_data=current_data,
+                price=price,
+                vwap_signals=vwap_signals,
+                vp_signals=vp_signals,
+                htf_levels=htf_levels,
+                confluence_factors=signal['factors']
             )
 
-            signal['regime'] = regime
-            signal['strategy_mode'] = regime['strategy']
+            if breakout['is_breakout']:
+                # BREAKOUT MODE: Price broke through confluence zone
+                signal['strategy_mode'] = 'breakout'
 
-            # BREAKOUT MODE: In trending markets, flip direction and add ATR stops
-            if regime['strategy'] == 'breakout':
-                # Check if we have strong momentum for breakout
-                breakout_info = self.detect_breakout_momentum(current_data, signal['vwap_signals'])
+                # FLIP DIRECTION: Trade WITH the breakout momentum
+                signal['direction'] = breakout['direction']
 
-                if not breakout_info['is_breakout']:
-                    # No clear breakout momentum - skip trade
-                    signal['should_trade'] = False
-                    signal['reject_reason'] = (
-                        f"Trending market but no clear breakout momentum "
-                        f"(ADX: {adx_value:.1f}, Candles: {breakout_info['confidence']}/5)"
-                    )
-                    from utils.logger import logger
-                    logger.info(
-                        f"⏸️  Signal SKIPPED | {symbol} | "
-                        f"Trending market (ADX: {adx_value:.1f}) but insufficient breakout momentum | "
-                        f"Candle alignment: {breakout_info['confidence']}/5 | "
-                        f"Price: {signal['price']:.5f}"
-                    )
-                    return None
+                # STOP LOSS: At the confluence level that was broken through
+                signal['stop_loss'] = breakout['broken_level']
 
-                # FLIP DIRECTION for breakout - trade WITH momentum
-                if breakout_info['momentum'] == 'strong_bullish':
-                    signal['direction'] = 'buy'  # Buy WITH upward momentum
-                elif breakout_info['momentum'] == 'strong_bearish':
-                    signal['direction'] = 'sell'  # Sell WITH downward momentum
+                # TAKE PROFIT: 3R from entry (or 2R for weaker confluence)
+                risk_distance = abs(price - breakout['broken_level'])
+                reward_ratio = 3.0 if signal['confluence_score'] >= 7 else 2.0
+                signal['reward_ratio'] = reward_ratio
 
-                # Add ATR-based risk management for breakout trades
-                risk_levels = get_breakout_risk_levels(
-                    data=current_data,
-                    entry_price=signal['price'],
-                    direction=signal['direction'],
-                    atr_period=ADX_PERIOD,
-                    atr_multiplier=1.5,
-                    risk_reward_ratio=2.0
-                )
-
-                signal['breakout_risk'] = risk_levels
-                signal['stop_loss'] = risk_levels['stop_loss']
-                signal['take_profit'] = risk_levels['take_profit']
+                if signal['direction'] == 'buy':
+                    signal['take_profit'] = price + (risk_distance * reward_ratio)
+                else:
+                    signal['take_profit'] = price - (risk_distance * reward_ratio)
 
                 from utils.logger import logger
                 logger.info(
                     f"🚀 BREAKOUT SIGNAL | {symbol} | "
-                    f"Direction: {signal['direction'].upper()} | "
-                    f"ADX: {adx_value:.1f} | Momentum: {breakout_info['momentum']} | "
-                    f"SL: {risk_levels['stop_loss']:.5f} ({risk_levels['risk_pips']:.1f} pips) | "
-                    f"TP: {risk_levels['take_profit']:.5f} ({risk_levels['reward_pips']:.1f} pips, 2R) | "
-                    f"Price: {signal['price']:.5f}"
+                    f"Direction: {signal['direction'].upper()} (WITH momentum) | "
+                    f"Broke through: {breakout['broken_factor']} @ {breakout['broken_level']:.5f} | "
+                    f"SL: {signal['stop_loss']:.5f} | "
+                    f"TP: {signal['take_profit']:.5f} ({reward_ratio}R) | "
+                    f"Confluence: {signal['confluence_score']} | "
+                    f"Price: {price:.5f}"
                 )
+            else:
+                # MEAN REVERSION MODE: Price is AT confluence, not breaking through
+                signal['strategy_mode'] = 'mean_reversion'
+                # No SL/TP - uses VWAP reversion exits (existing logic)
 
         # 6. Finalize direction if not set
         if signal['should_trade'] and signal['direction'] is None:
@@ -238,6 +220,147 @@ class SignalDetector:
                 signal['direction'] = 'sell'  # Price above VWAP, sell for reversion
 
         return signal if signal['should_trade'] else None
+
+    def detect_confluence_breakout(
+        self,
+        current_data: pd.DataFrame,
+        price: float,
+        vwap_signals: Dict,
+        vp_signals: Dict,
+        htf_levels: Dict,
+        confluence_factors: List[str]
+    ) -> Dict:
+        """
+        Detect if price BROKE THROUGH a confluence zone (not just AT it)
+
+        Uses existing confluence detection to identify levels, then checks if
+        price recently crossed through any of them with momentum.
+
+        Args:
+            current_data: H1 data with indicators
+            price: Current price
+            vwap_signals: VWAP signals dict
+            vp_signals: Volume profile signals dict
+            htf_levels: Higher timeframe levels dict
+            confluence_factors: List of detected confluence factors
+
+        Returns:
+            Dict with breakout info: is_breakout, direction, broken_level, broken_factor
+        """
+        # Look back 3-5 candles to detect recent breakout
+        lookback = min(5, len(current_data))
+        recent_candles = current_data.tail(lookback)
+
+        latest = current_data.iloc[-1]
+        current_price = latest['close']
+
+        # Check if we have bullish or bearish momentum (3+ candles aligned)
+        bullish_candles = (recent_candles['close'] > recent_candles['open']).sum()
+        bearish_candles = (recent_candles['close'] < recent_candles['open']).sum()
+
+        has_bullish_momentum = bullish_candles >= 3
+        has_bearish_momentum = bearish_candles >= 3
+
+        if not (has_bullish_momentum or has_bearish_momentum):
+            # No clear momentum, default to mean reversion
+            return {'is_breakout': False}
+
+        # Build list of all confluence levels to check for breakouts
+        confluence_levels = []
+
+        # 1. VWAP bands
+        if 'vwap' in latest and not pd.isna(latest['vwap']):
+            vwap = latest['vwap']
+            if 'vwap_std' in latest and not pd.isna(latest['vwap_std']):
+                std = latest['vwap_std']
+                confluence_levels.append({
+                    'level': vwap + std,
+                    'factor': 'VWAP +1σ',
+                    'tolerance': std * 0.2
+                })
+                confluence_levels.append({
+                    'level': vwap - std,
+                    'factor': 'VWAP -1σ',
+                    'tolerance': std * 0.2
+                })
+                confluence_levels.append({
+                    'level': vwap + (2 * std),
+                    'factor': 'VWAP +2σ',
+                    'tolerance': std * 0.2
+                })
+                confluence_levels.append({
+                    'level': vwap - (2 * std),
+                    'factor': 'VWAP -2σ',
+                    'tolerance': std * 0.2
+                })
+
+        # 2. Volume Profile levels (POC, VAH, VAL)
+        if vp_signals.get('poc'):
+            confluence_levels.append({
+                'level': vp_signals['poc'],
+                'factor': 'POC',
+                'tolerance': vp_signals['poc'] * (LEVEL_TOLERANCE_PCT / 100)
+            })
+        if vp_signals.get('vah'):
+            confluence_levels.append({
+                'level': vp_signals['vah'],
+                'factor': 'VAH',
+                'tolerance': vp_signals['vah'] * (LEVEL_TOLERANCE_PCT / 100)
+            })
+        if vp_signals.get('val'):
+            confluence_levels.append({
+                'level': vp_signals['val'],
+                'factor': 'VAL',
+                'tolerance': vp_signals['val'] * (LEVEL_TOLERANCE_PCT / 100)
+            })
+
+        # 3. HTF levels (only check levels we're actually near)
+        for level_name, level_price in htf_levels.items():
+            if level_price and not pd.isna(level_price):
+                # Only check levels within 2% of current price
+                if abs(current_price - level_price) / current_price < 0.02:
+                    confluence_levels.append({
+                        'level': level_price,
+                        'factor': level_name,
+                        'tolerance': level_price * (LEVEL_TOLERANCE_PCT / 100)
+                    })
+
+        # Check each confluence level for breakout
+        for conf_level in confluence_levels:
+            level = conf_level['level']
+            tolerance = conf_level['tolerance']
+
+            # Check if price broke THROUGH this level in recent candles
+            broke_through = False
+
+            for i in range(len(recent_candles) - 1):
+                candle = recent_candles.iloc[i]
+                next_candle = recent_candles.iloc[i + 1]
+
+                # Bullish breakout: price was below level, then broke above
+                if has_bullish_momentum:
+                    if candle['close'] < level and next_candle['close'] > (level + tolerance):
+                        broke_through = True
+                        break
+
+                # Bearish breakout: price was above level, then broke below
+                if has_bearish_momentum:
+                    if candle['close'] > level and next_candle['close'] < (level - tolerance):
+                        broke_through = True
+                        break
+
+            if broke_through:
+                # Found a breakout!
+                return {
+                    'is_breakout': True,
+                    'direction': 'buy' if has_bullish_momentum else 'sell',
+                    'broken_level': level,
+                    'broken_factor': conf_level['factor'],
+                    'momentum_candles': bullish_candles if has_bullish_momentum else bearish_candles
+                }
+
+        # No breakout detected through any confluence levels
+        return {'is_breakout': False}
 
     def detect_breakout_momentum(
         self,

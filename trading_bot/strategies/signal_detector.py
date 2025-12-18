@@ -631,8 +631,8 @@ class SignalDetector:
                             continue
                         level_price = float(level_price.iloc[0])
 
-                    # Check if valid price
-                    if pd.isna(level_price):
+                    # Check if valid price - ensure it's a scalar number before pd.isna
+                    if not isinstance(level_price, (int, float)) or pd.isna(level_price):
                         continue
 
                     if abs(current_price - level_price) / current_price < 0.05:
@@ -719,8 +719,8 @@ class SignalDetector:
                             continue
                         level_price = float(level_price.iloc[0])
 
-                    # Check if valid price
-                    if pd.isna(level_price):
+                    # Check if valid price - ensure it's a scalar number before pd.isna
+                    if not isinstance(level_price, (int, float)) or pd.isna(level_price):
                         continue
 
                     if abs(current_price - level_price) / current_price < 0.003:  # Very close

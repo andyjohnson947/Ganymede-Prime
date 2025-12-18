@@ -83,7 +83,8 @@ class RecoveryManager:
         symbol: str,
         entry_price: float,
         position_type: str,
-        volume: float
+        volume: float,
+        metadata: dict = None  # Added for strategy_mode tracking
     ):
         """
         Start tracking a position for recovery
@@ -94,6 +95,7 @@ class RecoveryManager:
             entry_price: Entry price
             position_type: 'buy' or 'sell'
             volume: Initial lot size
+            metadata: Optional metadata dict (e.g., strategy_mode)
         """
         self.tracked_positions[ticket] = {
             'ticket': ticket,
@@ -113,6 +115,7 @@ class RecoveryManager:
                 'tickets_closed': [],  # Which tickets have been closed
                 'total_closed_volume': 0.0,  # Total volume closed via partial
             },
+            'metadata': metadata or {},  # Store strategy mode and other metadata
         }
 
     def adopt_existing_positions(self, mt5_positions: List[Dict], magic_number: int = None) -> int:

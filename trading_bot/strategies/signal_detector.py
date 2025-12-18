@@ -294,7 +294,7 @@ class SignalDetector:
                     'tolerance': std * 0.2
                 })
 
-        # 2. Volume Profile levels (POC, VAH, VAL)
+        # 2. Volume Profile levels (POC, VAH, VAL, LVN, HVN)
         if vp_signals.get('poc'):
             confluence_levels.append({
                 'level': vp_signals['poc'],
@@ -313,6 +313,25 @@ class SignalDetector:
                 'factor': 'VAL',
                 'tolerance': vp_signals['val'] * (LEVEL_TOLERANCE_PCT / 100)
             })
+
+        # LVN/HVN levels (gaps and high-volume zones in volume profile)
+        if vp_signals.get('lvn_levels'):
+            for lvn in vp_signals['lvn_levels']:
+                if abs(current_price - lvn) / current_price < 0.02:  # Within 2%
+                    confluence_levels.append({
+                        'level': lvn,
+                        'factor': 'LVN',
+                        'tolerance': lvn * (LEVEL_TOLERANCE_PCT / 100)
+                    })
+
+        if vp_signals.get('hvn_levels'):
+            for hvn in vp_signals['hvn_levels']:
+                if abs(current_price - hvn) / current_price < 0.02:  # Within 2%
+                    confluence_levels.append({
+                        'level': hvn,
+                        'factor': 'HVN',
+                        'tolerance': hvn * (LEVEL_TOLERANCE_PCT / 100)
+                    })
 
         # 3. HTF levels (only check levels we're actually near)
         for level_name, level_price in htf_levels.items():

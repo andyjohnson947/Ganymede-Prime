@@ -368,10 +368,39 @@ class ConfluenceStrategy:
                         if not is_safe:
                             recovery_allowed = False
                             regime_info = self.regime_detector.detect_regime(h1_data)
+
+                            # Calculate current stack loss
+                            current_stack_pnl = self.recovery_manager.calculate_net_profit(ticket, all_positions)
+                            current_loss = abs(current_stack_pnl) if current_stack_pnl and current_stack_pnl < 0 else 0.0
+
                             print(f"\n⚠️  RECOVERY BLOCKED - {symbol} #{ticket}")
                             print(f"   Regime: {regime_info['regime'].upper()} (H: {regime_info['hurst']:.3f}, VHF: {regime_info['vhf']:.3f})")
                             print(f"   {reason}")
-                            print(f"   Position will rely on partial close only\n")
+                            print(f"   Current stack loss: ${current_loss:.2f}")
+
+                            # HYBRID EMERGENCY SL: If already losing $50+, set hard SL immediately
+                            if current_loss >= 50.0:
+                                emergency_sl = self._calculate_emergency_sl(
+                                    ticket=ticket,
+                                    position=position,
+                                    symbol_info=symbol_info,
+                                    all_positions=all_positions,
+                                    max_loss_usd=100.0
+                                )
+
+                                if emergency_sl:
+                                    # Set the emergency SL on the parent position
+                                    success = self._set_emergency_sl(ticket, emergency_sl, symbol)
+                                    if success:
+                                        print(f"   🛑 EMERGENCY SL SET: {emergency_sl:.5f} (limits loss to ~$100)")
+                                    else:
+                                        print(f"   ⚠️  Failed to set emergency SL - monitoring with $100 soft limit")
+                                else:
+                                    print(f"   ⚠️  Could not calculate emergency SL - monitoring with $100 soft limit")
+                            else:
+                                print(f"   ⏸️  Loss < $50 - monitoring with $100 soft limit (no hard SL)")
+
+                            print()
 
                     if recovery_allowed:
                         recovery_actions = self.recovery_manager.check_all_recovery_triggers(
@@ -814,6 +843,164 @@ class ConfluenceStrategy:
                     details=action
                 )
                 print(recovery_msg)
+
+    def _calculate_emergency_sl(
+        self,
+        ticket: int,
+        position: Dict,
+        symbol_info: Dict,
+        all_positions: List[Dict],
+        max_loss_usd: float
+    ) -> Optional[float]:
+        """
+        Calculate emergency stop loss price that limits total stack loss to max_loss_usd
+
+        Args:
+            ticket: Parent position ticket
+            position: Position dict from MT5
+            symbol_info: Symbol info from MT5
+            all_positions: All current positions
+            max_loss_usd: Maximum allowed loss in USD (e.g., 100.0)
+
+        Returns:
+            Stop loss price or None if calculation fails
+        """
+        try:
+            # Get current stack P&L
+            current_pnl = self.recovery_manager.calculate_net_profit(ticket, all_positions)
+            if current_pnl is None:
+                return None
+
+            current_loss = abs(current_pnl) if current_pnl < 0 else 0.0
+
+            # Calculate remaining loss buffer
+            remaining_loss_buffer = max_loss_usd - current_loss
+
+            if remaining_loss_buffer <= 0:
+                # Already exceeded target - set SL at current price
+                return position['price_current']
+
+            # Get position details
+            position_type = position['type']  # 0 = buy, 1 = sell
+            entry_price = position['price_open']
+            current_price = position['price_current']
+            volume = position['volume']
+
+            # Get symbol info for pip calculation
+            point = symbol_info.get('point', 0.00001)
+            contract_size = symbol_info.get('contract_size', 100000)
+            digits = symbol_info.get('digits', 5)
+
+            # Calculate pip value
+            if digits == 5 or digits == 3:
+                pip = point * 10
+            else:
+                pip = point
+
+            # Calculate dollar value per pip
+            # For forex: pip_value = (pip * contract_size * volume)
+            pip_value_usd = pip * contract_size * volume
+
+            # Calculate pips needed to hit max loss
+            pips_to_max_loss = remaining_loss_buffer / pip_value_usd if pip_value_usd > 0 else 0
+
+            # Calculate SL price
+            if position_type == 0:  # BUY position
+                # SL below current price
+                sl_price = current_price - (pips_to_max_loss * pip)
+            else:  # SELL position
+                # SL above current price
+                sl_price = current_price + (pips_to_max_loss * pip)
+
+            # Validate SL is on correct side of entry
+            if position_type == 0:  # BUY
+                if sl_price > entry_price:
+                    # SL would be above entry (wrong side)
+                    sl_price = entry_price - (10 * pip)  # Set 10 pips below entry as fallback
+            else:  # SELL
+                if sl_price < entry_price:
+                    # SL would be below entry (wrong side)
+                    sl_price = entry_price + (10 * pip)  # Set 10 pips above entry as fallback
+
+            return float(sl_price)
+
+        except Exception as e:
+            print(f"⚠️  Error calculating emergency SL: {e}")
+            return None
+
+    def _set_emergency_sl(self, ticket: int, sl_price: float, symbol: str) -> bool:
+        """
+        Set emergency stop loss on a position
+
+        Args:
+            ticket: Position ticket
+            sl_price: Stop loss price
+            symbol: Trading symbol
+
+        Returns:
+            bool: True if successful
+        """
+        try:
+            # Get position info
+            positions = self.mt5.get_positions()
+            if not positions:
+                return False
+
+            position = None
+            for pos in positions:
+                if pos['ticket'] == ticket:
+                    position = pos
+                    break
+
+            if not position:
+                print(f"⚠️  Position {ticket} not found for SL modification")
+                return False
+
+            # Get symbol info for validation
+            symbol_info = self.mt5.get_symbol_info(symbol)
+            if not symbol_info:
+                return False
+
+            # Validate SL against broker requirements
+            point = symbol_info.get('point', 0.00001)
+            stops_level = symbol_info.get('trade_stops_level', 0)
+            current_price = position['price_current']
+
+            # Check minimum distance
+            sl_distance = abs(current_price - sl_price) / point
+            if sl_distance < stops_level:
+                print(f"⚠️  SL too close to current price ({sl_distance:.0f} < {stops_level} points)")
+                # Adjust to minimum distance
+                if position['type'] == 0:  # BUY
+                    sl_price = current_price - (stops_level * point)
+                else:  # SELL
+                    sl_price = current_price + (stops_level * point)
+
+            # Use MT5 manager to modify position
+            import MetaTrader5 as mt5
+
+            request = {
+                "action": mt5.TRADE_ACTION_SLTP,
+                "symbol": symbol,
+                "position": ticket,
+                "sl": sl_price,
+                "tp": position.get('tp', 0.0),  # Keep existing TP if any
+            }
+
+            result = mt5.order_send(request)
+
+            if result and result.retcode == mt5.TRADE_RETCODE_DONE:
+                return True
+            else:
+                if result:
+                    print(f"⚠️  SL modification failed: {result.comment} (retcode: {result.retcode})")
+                else:
+                    print(f"⚠️  SL modification failed: {mt5.last_error()}")
+                return False
+
+        except Exception as e:
+            print(f"⚠️  Error setting emergency SL: {e}")
+            return False
 
     def _check_stack_drawdown_limit(self, ticket: int, all_positions: List[Dict]):
         """

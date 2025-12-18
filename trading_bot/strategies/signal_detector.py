@@ -88,25 +88,7 @@ class SignalDetector:
             signal['direction'] = 'buy' if vwap_signals['direction'] == 'below' else 'sell'
 
         elif vwap_signals['in_band_2']:
-            # BREAKOUT FILTER: Check if this is a breakout (not mean reversion)
-            breakout_info = self.detect_breakout_momentum(current_data, vwap_signals)
-
-            if breakout_info['is_breakout']:
-                # Price breaking out with momentum - block mean reversion trade
-                signal['should_trade'] = False
-                signal['reject_reason'] = (
-                    f"Breakout momentum detected - {breakout_info['momentum']} "
-                    f"({breakout_info['confidence']}/5 candles moving away from VWAP)"
-                )
-                logger.info(
-                    f"⏸️  Signal BLOCKED by breakout filter | {symbol} | "
-                    f"VWAP Band 2 | Momentum: {breakout_info['momentum']} | "
-                    f"Confidence: {breakout_info['confidence']}/5 candles | "
-                    f"Price: {price:.5f}"
-                )
-                return None  # Block the trade
-
-            # No breakout detected - proceed with mean reversion
+            # VWAP Band 2 - mean reversion trade
             signal['confluence_score'] += CONFLUENCE_WEIGHTS.get('vwap_band_2', 1)
             signal['factors'].append('VWAP Band 2')
             signal['direction'] = 'buy' if vwap_signals['direction'] == 'below' else 'sell'
@@ -291,73 +273,6 @@ class SignalDetector:
             })
 
         return signal if signal['should_trade'] else None
-
-    def detect_breakout_momentum(
-        self,
-        data: pd.DataFrame,
-        vwap_signals: Dict
-    ) -> Dict:
-        """
-        Detect if price is breaking out (momentum) vs mean reverting
-
-        Breakout conditions (BLOCK mean reversion):
-        - 4+ of last 5 candles aligned in same direction
-        - Candles moving AWAY from VWAP (not towards)
-
-        Args:
-            data: Price data with VWAP
-            vwap_signals: VWAP signal dict from get_signals()
-
-        Returns:
-            Dict with breakout analysis
-        """
-        # Get last 5 candles for momentum analysis
-        last_5 = data.tail(5)
-
-        # Count bullish vs bearish candles
-        bullish_candles = (last_5['close'] > last_5['open']).sum()
-        bearish_candles = (last_5['close'] < last_5['open']).sum()
-
-        # Determine momentum strength
-        if bullish_candles >= 4:  # 80%+ bullish
-            momentum = 'strong_bullish'
-            aligned = True
-            confidence = bullish_candles
-        elif bearish_candles >= 4:  # 80%+ bearish
-            momentum = 'strong_bearish'
-            aligned = True
-            confidence = bearish_candles
-        else:
-            momentum = 'mixed'
-            aligned = False
-            confidence = max(bullish_candles, bearish_candles)
-
-        # Check direction relative to VWAP
-        price_direction = vwap_signals['direction']  # 'above' or 'below'
-
-        # Determine if moving AWAY from VWAP (breakout) or TOWARDS (reversion)
-        if price_direction == 'below':
-            # Price below VWAP
-            # If bearish momentum → moving further DOWN (away from VWAP) = breakout
-            # If bullish momentum → moving UP towards VWAP = reversion
-            moving_away = (momentum == 'strong_bearish')
-        else:
-            # Price above VWAP
-            # If bullish momentum → moving further UP (away from VWAP) = breakout
-            # If bearish momentum → moving DOWN towards VWAP = reversion
-            moving_away = (momentum == 'strong_bullish')
-
-        # Breakout detected if candles aligned AND moving away from VWAP
-        is_breakout = aligned and moving_away
-
-        return {
-            'is_breakout': is_breakout,
-            'momentum': momentum,
-            'aligned': aligned,
-            'moving_away': moving_away,
-            'confidence': confidence,
-            'price_direction': price_direction
-        }
 
     def check_exit_signal(
         self,

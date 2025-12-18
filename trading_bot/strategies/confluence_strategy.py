@@ -231,7 +231,9 @@ class ConfluenceStrategy:
                     self._check_for_signals(symbol)
 
             except Exception as e:
+                import traceback
                 print(f"❌ Error processing {symbol}: {e}")
+                traceback.print_exc()
                 continue
 
         # 4. Generate periodic status report (after processing all symbols)

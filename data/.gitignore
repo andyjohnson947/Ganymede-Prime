@@ -1,0 +1,9 @@
+# Ignore all data files
+*.csv
+*.json
+*.pkl
+*.db
+
+# Except keep the directory structure
+!.gitignore
+!diagnostics/

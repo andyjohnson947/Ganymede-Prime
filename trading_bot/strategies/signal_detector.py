@@ -199,7 +199,7 @@ class SignalDetector:
                 from utils.logger import logger
                 broken_through_str = ' → '.join(breakout['broken_through'])
                 logger.info(
-                    f"🚀 STACKED BREAKOUT | {symbol} | "
+                    f"STACKED BREAKOUT | {symbol} | "
                     f"Direction: {signal['direction'].upper()} (WITH momentum) | "
                     f"Broke through {breakout['levels_broken_count']} levels: {broken_through_str} | "
                     f"Arrived at: {breakout['broken_factor']} | "

@@ -419,7 +419,7 @@ class ConfluenceStrategy:
                 )
                 if success:
                     tracked_info['breakeven_set'] = True
-                    print(f"🔒 Breakout #{ticket} - SL moved to breakeven @ {entry_price:.5f}")
+                    print(f"Breakout #{ticket} - SL moved to breakeven @ {entry_price:.5f}")
 
         else:  # sell position
             # Sell position: check if price moved halfway down to TP
@@ -435,7 +435,7 @@ class ConfluenceStrategy:
                 )
                 if success:
                     tracked_info['breakeven_set'] = True
-                    print(f"🔒 Breakout #{ticket} - SL moved to breakeven @ {entry_price:.5f}")
+                    print(f"Breakout #{ticket} - SL moved to breakeven @ {entry_price:.5f}")
 
     def _close_recovery_stack(self, original_ticket: int):
         """

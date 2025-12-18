@@ -743,6 +743,21 @@ class ConfluenceStrategy:
                 self.stats['dca_levels_added'] += 1
 
             # Record recovery action with diagnostic module
+            # Calculate current stack metrics for tracking
+            all_positions = self.mt5.get_positions()
+            stack_drawdown = 0.0
+            stack_total_volume = 0.0
+
+            if all_positions and original_ticket:
+                # Calculate net P&L and total volume for entire stack
+                stack_drawdown = self.recovery_manager.calculate_net_profit(
+                    original_ticket, all_positions
+                ) or 0.0
+
+                # Get total volume from tracked position
+                if original_ticket in self.recovery_manager.tracked_positions:
+                    stack_total_volume = self.recovery_manager.tracked_positions[original_ticket].get('total_volume', 0.0)
+
             recovery_data = {
                 'type': action_type,
                 'parent_ticket': original_ticket,
@@ -751,6 +766,8 @@ class ConfluenceStrategy:
                 'volume': volume,
                 'level': action.get('level', 1),
                 'trigger_time': datetime.now().isoformat(),
+                'drawdown': stack_drawdown,  # Current stack P&L (negative = loss)
+                'total_volume': stack_total_volume,  # Total stack exposure
             }
             self.diagnostic_module.record_recovery_action(recovery_data)
 

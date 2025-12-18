@@ -306,6 +306,7 @@ class MT5Manager:
 
         # Prepare request
         point = symbol_info.point
+        stops_level = symbol_info.trade_stops_level  # Minimum distance for SL/TP in points
 
         if order_type.lower() == 'buy':
             order_type_mt5 = mt5.ORDER_TYPE_BUY
@@ -313,6 +314,29 @@ class MT5Manager:
         else:
             order_type_mt5 = mt5.ORDER_TYPE_SELL
             price = mt5.symbol_info_tick(symbol).bid if price is None else price
+
+        # Validate and adjust SL/TP if needed to meet broker's minimum distance
+        if sl is not None:
+            sl_distance_points = abs(price - sl) / point
+            if sl_distance_points < stops_level:
+                print(f"⚠️  SL too close: {sl_distance_points:.0f} points < {stops_level} minimum")
+                # Adjust SL to meet minimum distance
+                if order_type.lower() == 'buy':
+                    sl = price - (stops_level * point)
+                else:
+                    sl = price + (stops_level * point)
+                print(f"   Adjusted SL to {sl:.5f} ({stops_level} points)")
+
+        if tp is not None:
+            tp_distance_points = abs(price - tp) / point
+            if tp_distance_points < stops_level:
+                print(f"⚠️  TP too close: {tp_distance_points:.0f} points < {stops_level} minimum")
+                # Adjust TP to meet minimum distance
+                if order_type.lower() == 'buy':
+                    tp = price + (stops_level * point)
+                else:
+                    tp = price - (stops_level * point)
+                print(f"   Adjusted TP to {tp:.5f} ({stops_level} points)")
 
         # Determine supported filling mode
         filling_type = self._get_filling_mode(symbol_info)

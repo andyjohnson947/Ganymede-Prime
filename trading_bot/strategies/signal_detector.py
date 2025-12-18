@@ -692,15 +692,17 @@ class SignalDetector:
                         'tolerance': hvn * (LEVEL_TOLERANCE_PCT / 100)
                     })
 
-        # 4. HTF levels
-        for level_name, level_price in htf_levels.items():
-            if level_price and not pd.isna(level_price):
-                if abs(current_price - level_price) / current_price < 0.05:
-                    confluence_levels.append({
-                        'level': level_price,
-                        'factor': level_name,
-                        'tolerance': level_price * (LEVEL_TOLERANCE_PCT / 100)
-                    })
+        # 4. HTF levels (flatten nested structure)
+        for timeframe, levels_dict in htf_levels.items():
+            if isinstance(levels_dict, dict):
+                for level_name, level_price in levels_dict.items():
+                    if level_price and not pd.isna(level_price):
+                        if abs(current_price - level_price) / current_price < 0.05:
+                            confluence_levels.append({
+                                'level': level_price,
+                                'factor': f"{timeframe}_{level_name}",
+                                'tolerance': level_price * (LEVEL_TOLERANCE_PCT / 100)
+                            })
 
         return confluence_levels
 
@@ -758,12 +760,16 @@ class SignalDetector:
                     entry_level = hvn
                     break
 
-        # Check HTF levels (previous day/week levels)
-        for level_name, level_price in htf_levels.items():
-            if level_price and not pd.isna(level_price):
-                if abs(current_price - level_price) / current_price < 0.003:  # Very close
-                    arrival_factors.append(level_name)
-                    entry_level = level_price
+        # Check HTF levels (previous day/week levels) - flatten nested structure
+        for timeframe, levels_dict in htf_levels.items():
+            if isinstance(levels_dict, dict):
+                for level_name, level_price in levels_dict.items():
+                    if level_price and not pd.isna(level_price):
+                        if abs(current_price - level_price) / current_price < 0.003:  # Very close
+                            arrival_factors.append(f"{timeframe}_{level_name}")
+                            entry_level = level_price
+                            break
+                if arrival_factors:  # Break outer loop if found
                     break
 
         # Require at least 1 strong arrival factor (or 2+ regular confluence factors already detected)

@@ -10,8 +10,7 @@ from datetime import datetime
 from indicators.vwap import VWAP
 from indicators.volume_profile import VolumeProfile
 from indicators.htf_levels import HTFLevels
-from indicators.adx import calculate_adx, should_trade_based_on_trend, detect_market_regime
-from indicators.atr import get_breakout_risk_levels
+from indicators.adx import calculate_adx, should_trade_based_on_trend
 from config.strategy_config import (
     MIN_CONFLUENCE_SCORE,
     CONFLUENCE_WEIGHTS,

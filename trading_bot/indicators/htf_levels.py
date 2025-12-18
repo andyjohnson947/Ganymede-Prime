@@ -318,8 +318,20 @@ class HTFLevels:
 
     def _at_level(self, price: float, level: float, tolerance: float) -> bool:
         """Check if price is at level within tolerance"""
+        # Handle pandas Series (convert to scalar)
+        if hasattr(level, 'iloc'):
+            if len(level) == 0:
+                return False
+            level = float(level.iloc[0])
+
+        # Handle None or NaN
+        if level is None or (isinstance(level, float) and pd.isna(level)):
+            return False
+
+        # Check for zero level (invalid)
         if level == 0:
             return False
+
         return abs(price - level) <= tolerance
 
     def _empty_daily_levels(self) -> Dict:

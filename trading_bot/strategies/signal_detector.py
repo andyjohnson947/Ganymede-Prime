@@ -197,11 +197,13 @@ class SignalDetector:
                     signal['take_profit'] = price - (risk_distance * reward_ratio)
 
                 from utils.logger import logger
+                broken_through_str = ' → '.join(breakout['broken_through'])
                 logger.info(
-                    f"🚀 BREAKOUT SIGNAL | {symbol} | "
+                    f"🚀 STACKED BREAKOUT | {symbol} | "
                     f"Direction: {signal['direction'].upper()} (WITH momentum) | "
-                    f"Broke through: {breakout['broken_factor']} @ {breakout['broken_level']:.5f} | "
-                    f"SL: {signal['stop_loss']:.5f} | "
+                    f"Broke through {breakout['levels_broken_count']} levels: {broken_through_str} | "
+                    f"Arrived at: {breakout['broken_factor']} | "
+                    f"Entry/SL: {signal['stop_loss']:.5f} | "
                     f"TP: {signal['take_profit']:.5f} ({reward_ratio}R) | "
                     f"Confluence: {signal['confluence_score']} | "
                     f"Price: {price:.5f}"
@@ -231,10 +233,15 @@ class SignalDetector:
         confluence_factors: List[str]
     ) -> Dict:
         """
-        Detect if price BROKE THROUGH a confluence zone (not just AT it)
+        Detect STACKED breakout confluences:
+        1. Price broke THROUGH multiple confluence levels (demonstrates strength)
+        2. Price now AT a strong confluence zone (entry point with backing)
+        3. Stacking = High confidence breakout trade
 
-        Uses existing confluence detection to identify levels, then checks if
-        price recently crossed through any of them with momentum.
+        Example: Price breaks through VWAP Band 1 → Band 2 → arrives at Band 3 + LVN
+
+        This is NOT random - it's looking for demonstrated momentum THROUGH levels
+        combined with arrival AT a new strong confluence for entry.
 
         Args:
             current_data: H1 data with indicators
@@ -247,16 +254,17 @@ class SignalDetector:
         Returns:
             Dict with breakout info: is_breakout, direction, broken_level, broken_factor
         """
-        # Look back 3-5 candles to detect recent breakout
-        lookback = min(5, len(current_data))
+        # Look back to detect recent breakouts through levels
+        lookback = min(10, len(current_data))  # Extended to see more history
         recent_candles = current_data.tail(lookback)
 
         latest = current_data.iloc[-1]
         current_price = latest['close']
 
         # Check if we have bullish or bearish momentum (3+ candles aligned)
-        bullish_candles = (recent_candles['close'] > recent_candles['open']).sum()
-        bearish_candles = (recent_candles['close'] < recent_candles['open']).sum()
+        last_5 = recent_candles.tail(5)
+        bullish_candles = (last_5['close'] > last_5['open']).sum()
+        bearish_candles = (last_5['close'] < last_5['open']).sum()
 
         has_bullish_momentum = bullish_candles >= 3
         has_bearish_momentum = bearish_candles >= 3
@@ -265,7 +273,87 @@ class SignalDetector:
             # No clear momentum, default to mean reversion
             return {'is_breakout': False}
 
-        # Build list of all confluence levels to check for breakouts
+        # Step 1: Build all confluence levels to check for BREAKTHROUGHS
+        all_levels = self._build_confluence_levels(latest, vwap_signals, vp_signals, htf_levels, current_price)
+
+        # Step 2: Count how many levels price BROKE THROUGH recently
+        levels_broken_through = []
+
+        for conf_level in all_levels:
+            level = conf_level['level']
+            tolerance = conf_level['tolerance']
+
+            # Check if price broke THROUGH this level in recent candles
+            for i in range(len(recent_candles) - 1):
+                candle = recent_candles.iloc[i]
+                next_candle = recent_candles.iloc[i + 1]
+
+                # Bullish breakout: price was below level, then broke above
+                if has_bullish_momentum:
+                    if candle['close'] < level and next_candle['close'] > (level + tolerance):
+                        levels_broken_through.append({
+                            'level': level,
+                            'factor': conf_level['factor'],
+                            'candle_index': i
+                        })
+                        break
+
+                # Bearish breakout: price was above level, then broke below
+                if has_bearish_momentum:
+                    if candle['close'] > level and next_candle['close'] < (level - tolerance):
+                        levels_broken_through.append({
+                            'level': level,
+                            'factor': conf_level['factor'],
+                            'candle_index': i
+                        })
+                        break
+
+        # Step 3: Check if we broke through MULTIPLE levels (demonstrates strength)
+        if len(levels_broken_through) < 2:
+            # Need to break through at least 2 levels to show real momentum
+            return {'is_breakout': False}
+
+        # Step 4: Check if price is NOW AT a strong confluence zone (arrival point)
+        # This should be from the CURRENT confluence factors detected
+        arrival_confluences = self._check_arrival_confluence(
+            current_price,
+            latest,
+            vwap_signals,
+            vp_signals,
+            htf_levels,
+            confluence_factors
+        )
+
+        if not arrival_confluences['has_confluence']:
+            # Broke through levels but didn't arrive at a strong confluence
+            return {'is_breakout': False}
+
+        # Step 5: STACKED BREAKOUT DETECTED!
+        # - Broke through 2+ levels (momentum)
+        # - Arrived at strong confluence (entry point)
+        # - Enter WITH momentum, SL at arrival confluence
+
+        direction = 'buy' if has_bullish_momentum else 'sell'
+
+        return {
+            'is_breakout': True,
+            'direction': direction,
+            'broken_level': arrival_confluences['entry_level'],  # SL at arrival confluence
+            'broken_factor': arrival_confluences['arrival_factors'],
+            'levels_broken_count': len(levels_broken_through),
+            'broken_through': [f"{b['factor']} @ {b['level']:.5f}" for b in levels_broken_through],
+            'momentum_candles': bullish_candles if has_bullish_momentum else bearish_candles
+        }
+
+    def _build_confluence_levels(
+        self,
+        latest: pd.Series,
+        vwap_signals: Dict,
+        vp_signals: Dict,
+        htf_levels: Dict,
+        current_price: float
+    ) -> List[Dict]:
+        """Build list of all confluence levels to check for breakthroughs"""
         confluence_levels = []
 
         # 1. VWAP bands
@@ -273,51 +361,29 @@ class SignalDetector:
             vwap = latest['vwap']
             if 'vwap_std' in latest and not pd.isna(latest['vwap_std']):
                 std = latest['vwap_std']
+                confluence_levels.extend([
+                    {'level': vwap + std, 'factor': 'VWAP +1σ', 'tolerance': std * 0.2},
+                    {'level': vwap - std, 'factor': 'VWAP -1σ', 'tolerance': std * 0.2},
+                    {'level': vwap + (2 * std), 'factor': 'VWAP +2σ', 'tolerance': std * 0.2},
+                    {'level': vwap - (2 * std), 'factor': 'VWAP -2σ', 'tolerance': std * 0.2},
+                    {'level': vwap + (3 * std), 'factor': 'VWAP +3σ', 'tolerance': std * 0.2},
+                    {'level': vwap - (3 * std), 'factor': 'VWAP -3σ', 'tolerance': std * 0.2},
+                ])
+
+        # 2. Volume Profile levels
+        for key, factor in [('poc', 'POC'), ('vah', 'VAH'), ('val', 'VAL')]:
+            if vp_signals.get(key):
+                level = vp_signals[key]
                 confluence_levels.append({
-                    'level': vwap + std,
-                    'factor': 'VWAP +1σ',
-                    'tolerance': std * 0.2
-                })
-                confluence_levels.append({
-                    'level': vwap - std,
-                    'factor': 'VWAP -1σ',
-                    'tolerance': std * 0.2
-                })
-                confluence_levels.append({
-                    'level': vwap + (2 * std),
-                    'factor': 'VWAP +2σ',
-                    'tolerance': std * 0.2
-                })
-                confluence_levels.append({
-                    'level': vwap - (2 * std),
-                    'factor': 'VWAP -2σ',
-                    'tolerance': std * 0.2
+                    'level': level,
+                    'factor': factor,
+                    'tolerance': level * (LEVEL_TOLERANCE_PCT / 100)
                 })
 
-        # 2. Volume Profile levels (POC, VAH, VAL, LVN, HVN)
-        if vp_signals.get('poc'):
-            confluence_levels.append({
-                'level': vp_signals['poc'],
-                'factor': 'POC',
-                'tolerance': vp_signals['poc'] * (LEVEL_TOLERANCE_PCT / 100)
-            })
-        if vp_signals.get('vah'):
-            confluence_levels.append({
-                'level': vp_signals['vah'],
-                'factor': 'VAH',
-                'tolerance': vp_signals['vah'] * (LEVEL_TOLERANCE_PCT / 100)
-            })
-        if vp_signals.get('val'):
-            confluence_levels.append({
-                'level': vp_signals['val'],
-                'factor': 'VAL',
-                'tolerance': vp_signals['val'] * (LEVEL_TOLERANCE_PCT / 100)
-            })
-
-        # LVN/HVN levels (gaps and high-volume zones in volume profile)
+        # 3. LVN/HVN levels
         if vp_signals.get('lvn_levels'):
             for lvn in vp_signals['lvn_levels']:
-                if abs(current_price - lvn) / current_price < 0.02:  # Within 2%
+                if abs(current_price - lvn) / current_price < 0.05:  # Within 5%
                     confluence_levels.append({
                         'level': lvn,
                         'factor': 'LVN',
@@ -326,60 +392,99 @@ class SignalDetector:
 
         if vp_signals.get('hvn_levels'):
             for hvn in vp_signals['hvn_levels']:
-                if abs(current_price - hvn) / current_price < 0.02:  # Within 2%
+                if abs(current_price - hvn) / current_price < 0.05:  # Within 5%
                     confluence_levels.append({
                         'level': hvn,
                         'factor': 'HVN',
                         'tolerance': hvn * (LEVEL_TOLERANCE_PCT / 100)
                     })
 
-        # 3. HTF levels (only check levels we're actually near)
+        # 4. HTF levels
         for level_name, level_price in htf_levels.items():
             if level_price and not pd.isna(level_price):
-                # Only check levels within 2% of current price
-                if abs(current_price - level_price) / current_price < 0.02:
+                if abs(current_price - level_price) / current_price < 0.05:
                     confluence_levels.append({
                         'level': level_price,
                         'factor': level_name,
                         'tolerance': level_price * (LEVEL_TOLERANCE_PCT / 100)
                     })
 
-        # Check each confluence level for breakout
-        for conf_level in confluence_levels:
-            level = conf_level['level']
-            tolerance = conf_level['tolerance']
+        return confluence_levels
 
-            # Check if price broke THROUGH this level in recent candles
-            broke_through = False
+    def _check_arrival_confluence(
+        self,
+        current_price: float,
+        latest: pd.Series,
+        vwap_signals: Dict,
+        vp_signals: Dict,
+        htf_levels: Dict,
+        confluence_factors: List[str]
+    ) -> Dict:
+        """
+        Check if current price is AT a strong confluence zone (arrival point)
 
-            for i in range(len(recent_candles) - 1):
-                candle = recent_candles.iloc[i]
-                next_candle = recent_candles.iloc[i + 1]
+        Strong arrival zones:
+        - VWAP Band 3 (extreme deviation)
+        - LVN (low volume node - price accelerates through)
+        - HVN (high volume node - strong S/R)
+        - HTF level alignment
+        - Multiple factors stacked at current price
+        """
+        arrival_factors = []
+        entry_level = current_price
 
-                # Bullish breakout: price was below level, then broke above
-                if has_bullish_momentum:
-                    if candle['close'] < level and next_candle['close'] > (level + tolerance):
-                        broke_through = True
-                        break
+        # Check VWAP Band 3 (extreme deviation - strong reversal/continuation point)
+        if 'vwap' in latest and 'vwap_std' in latest:
+            vwap = latest['vwap']
+            std = latest['vwap_std']
 
-                # Bearish breakout: price was above level, then broke below
-                if has_bearish_momentum:
-                    if candle['close'] > level and next_candle['close'] < (level - tolerance):
-                        broke_through = True
-                        break
+            band_3_upper = vwap + (3 * std)
+            band_3_lower = vwap - (3 * std)
+            tolerance = std * 0.3
 
-            if broke_through:
-                # Found a breakout!
-                return {
-                    'is_breakout': True,
-                    'direction': 'buy' if has_bullish_momentum else 'sell',
-                    'broken_level': level,
-                    'broken_factor': conf_level['factor'],
-                    'momentum_candles': bullish_candles if has_bullish_momentum else bearish_candles
-                }
+            if abs(current_price - band_3_upper) < tolerance:
+                arrival_factors.append('VWAP +3σ')
+                entry_level = band_3_upper
+            elif abs(current_price - band_3_lower) < tolerance:
+                arrival_factors.append('VWAP -3σ')
+                entry_level = band_3_lower
 
-        # No breakout detected through any confluence levels
-        return {'is_breakout': False}
+        # Check LVN (critical for breakouts - price gaps where momentum accelerates)
+        if vp_signals.get('lvn_levels'):
+            for lvn in vp_signals['lvn_levels']:
+                if abs(current_price - lvn) / current_price < 0.005:  # Very close (0.5%)
+                    arrival_factors.append('LVN')
+                    entry_level = lvn
+                    break
+
+        # Check HVN (high volume zones - strong confluence)
+        if vp_signals.get('hvn_levels'):
+            for hvn in vp_signals['hvn_levels']:
+                if abs(current_price - hvn) / current_price < 0.005:
+                    arrival_factors.append('HVN')
+                    entry_level = hvn
+                    break
+
+        # Check HTF levels (previous day/week levels)
+        for level_name, level_price in htf_levels.items():
+            if level_price and not pd.isna(level_price):
+                if abs(current_price - level_price) / current_price < 0.003:  # Very close
+                    arrival_factors.append(level_name)
+                    entry_level = level_price
+                    break
+
+        # Require at least 1 strong arrival factor (or 2+ regular confluence factors already detected)
+        has_strong_arrival = len(arrival_factors) > 0
+        has_stacked_confluence = len(confluence_factors) >= 2  # From main detection
+
+        has_confluence = has_strong_arrival or has_stacked_confluence
+
+        return {
+            'has_confluence': has_confluence,
+            'arrival_factors': ', '.join(arrival_factors) if arrival_factors else 'Stacked Confluence',
+            'entry_level': entry_level,
+            'factor_count': len(arrival_factors)
+        }
 
     def detect_breakout_momentum(
         self,

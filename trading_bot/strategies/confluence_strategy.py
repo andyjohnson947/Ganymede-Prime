@@ -12,6 +12,7 @@ from core.mt5_manager import MT5Manager
 from strategies.signal_detector import SignalDetector
 from strategies.recovery_manager import RecoveryManager
 from strategies.stack_limiter import StackDrawdownLimiter
+from indicators.advanced_regime_detector import AdvancedRegimeDetector
 from utils.risk_calculator import RiskCalculator
 from utils.config_reloader import reload_config, print_current_config
 from utils.position_reporter import PositionStatusReporter
@@ -65,6 +66,7 @@ class ConfluenceStrategy:
         self.signal_detector = SignalDetector()
         self.recovery_manager = RecoveryManager()
         self.stack_limiter = StackDrawdownLimiter(max_drawdown_usd=MAX_STACK_DRAWDOWN_USD)
+        self.regime_detector = AdvancedRegimeDetector()  # Hurst + VHF regime detection
         self.risk_calculator = RiskCalculator()
         self.position_reporter = PositionStatusReporter()
 
@@ -357,13 +359,28 @@ class ConfluenceStrategy:
                     else:
                         pip_value = point
 
-                    recovery_actions = self.recovery_manager.check_all_recovery_triggers(
-                        ticket, current_price, pip_value, all_positions=all_positions
-                    )
+                    # REGIME CHECK: Only allow recovery in ranging/choppy markets
+                    h1_data = self.market_data_cache.get(symbol, {}).get('h1')
+                    recovery_allowed = True
 
-                    # Execute recovery actions
-                    for action in recovery_actions:
-                        self._execute_recovery_action(action)
+                    if h1_data is not None and not h1_data.empty:
+                        is_safe, reason = self.regime_detector.is_safe_for_recovery(h1_data, min_confidence=0.60)
+                        if not is_safe:
+                            recovery_allowed = False
+                            regime_info = self.regime_detector.detect_regime(h1_data)
+                            print(f"\n⚠️  RECOVERY BLOCKED - {symbol} #{ticket}")
+                            print(f"   Regime: {regime_info['regime'].upper()} (H: {regime_info['hurst']:.3f}, VHF: {regime_info['vhf']:.3f})")
+                            print(f"   {reason}")
+                            print(f"   Position will rely on partial close only\n")
+
+                    if recovery_allowed:
+                        recovery_actions = self.recovery_manager.check_all_recovery_triggers(
+                            ticket, current_price, pip_value, all_positions=all_positions
+                        )
+
+                        # Execute recovery actions
+                        for action in recovery_actions:
+                            self._execute_recovery_action(action)
 
                     # STACK DRAWDOWN LIMIT: Check if stack exceeded $100 loss limit
                     self._check_stack_drawdown_limit(ticket, all_positions)
@@ -872,7 +889,7 @@ class ConfluenceStrategy:
 
     def _check_trading_suspension(self, symbol: str) -> bool:
         """
-        Check if trading should resume based on market regime
+        Check if trading should resume based on market regime (Hurst + VHF)
 
         Args:
             symbol: Trading symbol to check
@@ -893,21 +910,23 @@ class ConfluenceStrategy:
         if h1_data is None or h1_data.empty:
             return False
 
-        # Analyze current market regime
-        from indicators.market_regime import MarketRegimeDetector
-        regime_detector = MarketRegimeDetector()
-        regime_info = regime_detector.detect_regime(h1_data)
+        # Use advanced regime detector (Hurst + VHF)
+        is_safe, reason = self.regime_detector.is_safe_for_recovery(h1_data, min_confidence=0.65)
 
-        current_regime = regime_info.get('regime', 'unknown')
+        # Resume trading if market is SAFE for recovery (ranging/choppy)
+        if is_safe:
+            regime_info = self.regime_detector.detect_regime(h1_data)
 
-        # Resume trading if market is RANGING
-        if current_regime == 'ranging':
             print(f"\n{'='*80}")
             print(f"✅ TRADING SUSPENSION LIFTED")
             print(f"{'='*80}")
-            print(f"   Market regime: {current_regime.upper()}")
+            print(f"   Regime: {regime_info['regime'].upper()} (confidence: {regime_info['confidence']:.0%})")
+            print(f"   Hurst Exponent: {regime_info['hurst']:.3f} (< 0.5 = mean reverting)")
+            print(f"   VHF: {regime_info['vhf']:.3f} (< 0.40 = ranging)")
+            print(f"   VHF Trend: {regime_info.get('vhf_trend', 'unknown')}")
             print(f"   Suspended since: {self.suspension_time.strftime('%Y-%m-%d %H:%M:%S') if self.suspension_time else 'N/A'}")
             print(f"   Previous reason: {self.suspension_reason}")
+            print(f"   Reason: {reason}")
             print(f"   Trading resuming for {symbol}...")
             print(f"{'='*80}\n")
 
@@ -916,7 +935,12 @@ class ConfluenceStrategy:
             self.suspension_time = None
             return True
         else:
-            # Still trending - keep trading suspended
+            # Still trending or VHF rising - keep trading suspended
+            regime_info = self.regime_detector.detect_regime(h1_data)
+            print(f"🛑 Trading still suspended for {symbol}")
+            print(f"   Current regime: {regime_info['regime'].upper()} (confidence: {regime_info['confidence']:.0%})")
+            print(f"   Hurst: {regime_info['hurst']:.3f}, VHF: {regime_info['vhf']:.3f}")
+            print(f"   Reason: {reason}")
             return False
 
     def _print_status_report(self):
@@ -940,6 +964,32 @@ class ConfluenceStrategy:
             )
 
             print(report)
+
+            # Show current market regime for all symbols
+            print("\n" + "="*80)
+            print("📊 MARKET REGIME STATUS (Hurst + VHF)")
+            print("="*80)
+
+            for symbol in SYMBOLS:
+                if symbol in self.market_data_cache:
+                    h1_data = self.market_data_cache[symbol].get('h1')
+                    if h1_data is not None and not h1_data.empty:
+                        regime_info = self.regime_detector.detect_regime(h1_data)
+                        is_safe, reason = self.regime_detector.is_safe_for_recovery(h1_data, min_confidence=0.60)
+
+                        # Color code based on safety
+                        status_icon = "✅" if is_safe else "⚠️"
+
+                        print(f"\n{status_icon} {symbol}")
+                        print(f"   Regime: {regime_info['regime'].upper()} (confidence: {regime_info['confidence']:.0%})")
+                        print(f"   Hurst: {regime_info['hurst']:.3f} {'(mean reverting)' if regime_info['hurst'] < 0.5 else '(trending)'}")
+                        print(f"   VHF: {regime_info['vhf']:.3f} {'(ranging)' if regime_info['vhf'] < 0.40 else '(trending)'}")
+                        print(f"   VHF Trend: {regime_info.get('vhf_trend', 'unknown').upper()}")
+                        print(f"   Recovery: {'ALLOWED' if is_safe else 'BLOCKED'}")
+                        if not is_safe:
+                            print(f"   Reason: {reason}")
+
+            print("="*80 + "\n")
 
             # Show management tree if enabled (shows parent-child relationships)
             if SHOW_MANAGEMENT_TREE:

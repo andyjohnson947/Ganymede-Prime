@@ -420,24 +420,27 @@ class AdvancedRegimeDetector:
         vhf = regime_info.get('vhf', 0)
         adx = regime_info.get('adx', 0)
 
+        # Format ADX for display (can't use conditional inside f-string format spec)
+        adx_display = f"{adx:.1f}" if adx else "N/A"
+
         # CRITICAL: If VHF rising RAPIDLY above trending threshold, block
         if regime_info.get('vhf_trend') == 'rising' and vhf and vhf > self.vhf_trending:
             return False, f"❌ VHF RISING above {self.vhf_trending:.2f} - strong trend forming | VHF: {vhf:.3f}"
 
         # Block only HEAVY trending (2+ indicators agree, confidence >= 75%)
         if regime == 'trending' and confidence >= 0.75:
-            return False, f"❌ HEAVY TRENDING (conf: {confidence:.0%}) | H:{hurst:.3f}, VHF:{vhf:.3f}, ADX:{adx:.1f if adx else 'N/A'}"
+            return False, f"❌ HEAVY TRENDING (conf: {confidence:.0%}) | H:{hurst:.3f}, VHF:{vhf:.3f}, ADX:{adx_display}"
 
         # Allow everything else (ranging, choppy, slight trends)
         if regime == 'ranging':
-            return True, f"✅ RANGING - excellent for mean reversion | H:{hurst:.3f}, VHF:{vhf:.3f}, ADX:{adx:.1f if adx else 'N/A'}"
+            return True, f"✅ RANGING - excellent for mean reversion | H:{hurst:.3f}, VHF:{vhf:.3f}, ADX:{adx_display}"
 
         if regime == 'choppy':
-            return True, f"✅ CHOPPY - acceptable for mean reversion | H:{hurst:.3f}, VHF:{vhf:.3f}, ADX:{adx:.1f if adx else 'N/A'}"
+            return True, f"✅ CHOPPY - acceptable for mean reversion | H:{hurst:.3f}, VHF:{vhf:.3f}, ADX:{adx_display}"
 
         # Even slight trending (1 indicator only) is allowed
         if regime == 'trending' and confidence < 0.75:
-            return True, f"✅ SLIGHT trend (conf: {confidence:.0%}) - tradeable | H:{hurst:.3f}, VHF:{vhf:.3f}, ADX:{adx:.1f if adx else 'N/A'}"
+            return True, f"✅ SLIGHT trend (conf: {confidence:.0%}) - tradeable | H:{hurst:.3f}, VHF:{vhf:.3f}, ADX:{adx_display}"
 
         # Unknown - allow (don't miss opportunities)
         return True, f"⚠️  Uncertain regime ({regime}) - allowing trade"

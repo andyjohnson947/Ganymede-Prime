@@ -535,11 +535,13 @@ class ConfluenceStrategy:
                 is_safe, reason = self.regime_detector.is_safe_for_mean_reversion(m30_data)
                 if not is_safe:
                     regime_info = self.regime_detector.detect_regime(m30_data)
+                    adx_val = regime_info.get('adx')
+                    adx_display = f"{adx_val:.1f}" if adx_val else "N/A"
                     print(f"🛑 Mean reversion blocked - HEAVY TRENDING market:")
                     print(f"   M30 Regime: {regime_info['regime'].upper()} (Confidence: {regime_info['confidence']:.0%})")
                     print(f"   Hurst: {regime_info['hurst']:.3f} (HEAVY trend threshold: > 0.65)")
                     print(f"   VHF: {regime_info['vhf']:.3f} (HEAVY trend threshold: > 0.45)")
-                    print(f"   ADX: {regime_info['adx']:.1f if regime_info['adx'] else 'N/A'} (HEAVY trend threshold: > 30)")
+                    print(f"   ADX: {adx_display} (HEAVY trend threshold: > 30)")
                     print(f"   Reason: {reason}")
                     print(f"   💡 Requires 2+ indicators agreeing on HEAVY trending to block")
                     print(f"   💡 Slight trends / choppy markets are ALLOWED")

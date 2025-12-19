@@ -187,7 +187,7 @@ TRADE_DAYS = [0, 1, 2, 3, 4]  # Monday-Friday
 MAX_OPEN_POSITIONS = 3  # Reduced from 10 for safety
 
 # Maximum positions per symbol
-MAX_POSITIONS_PER_SYMBOL = 1  # Only 1 position per symbol at a time
+MAX_POSITIONS_PER_SYMBOL = 2  # Allow 2 positions per symbol for intraday signals
 
 # =============================================================================
 # EXIT MANAGEMENT (Net Profit Target + Time Limit)

@@ -592,8 +592,9 @@ class ConfluenceStrategy:
 
         if strategy_mode == 'breakout':
             # Breakout trades use confluence level as SL, 3R TP
-            sl = signal.get('stop_loss')
-            tp = signal.get('take_profit')
+            # Convert to Python float (MT5 doesn't accept numpy.float64)
+            sl = float(signal.get('stop_loss')) if signal.get('stop_loss') is not None else None
+            tp = float(signal.get('take_profit')) if signal.get('take_profit') is not None else None
             reward_ratio = signal.get('reward_ratio', 3.0)
             comment = f"Breakout:{signal['confluence_score']}"
             print(f"📊 Strategy: Breakout (Confluence-based SL/TP)")

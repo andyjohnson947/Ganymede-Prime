@@ -110,6 +110,11 @@ class RecoveryManager:
             'max_underwater_pips': 0,
             'recovery_active': False,
             'open_time': datetime.now(),  # Track when position opened
+            'last_recovery_check': {  # Prevent duplicate recovery orders
+                'grid': None,  # Last time grid was checked/added
+                'hedge': None,  # Last time hedge was checked/added
+                'dca': None,  # Last time DCA was checked/added
+            },
             'partial_close_state': {  # Track partial closures
                 'levels_closed': [],  # Which profit levels have been closed
                 'tickets_closed': [],  # Which tickets have been closed
@@ -538,6 +543,13 @@ class RecoveryManager:
 
         position = self.tracked_positions[ticket]
 
+        # DUPLICATE PREVENTION: Check cooldown (30 seconds between grid adds)
+        last_check = position.get('last_recovery_check', {}).get('grid')
+        if last_check:
+            time_since_last = (datetime.now() - last_check).total_seconds()
+            if time_since_last < 30:
+                return None  # Too soon, skip
+
         # Check if maxed out grid levels
         if len(position['grid_levels']) >= MAX_GRID_LEVELS:
             return None
@@ -582,6 +594,9 @@ class RecoveryManager:
             position['total_volume'] += grid_volume
             position['recovery_active'] = True
 
+            # Update cooldown timestamp to prevent duplicates
+            position['last_recovery_check']['grid'] = datetime.now()
+
             print(f"\n  ✅ GRID TRIGGERED!")
             print(f"  🔹 Grid Level {len(position['grid_levels'])} triggered for {ticket}")
             print(f"     Entry: {entry_price:.5f} → Grid: {grid_price:.5f}")
@@ -624,6 +639,13 @@ class RecoveryManager:
             return None
 
         position = self.tracked_positions[ticket]
+
+        # DUPLICATE PREVENTION: Check cooldown (60 seconds between hedges - they're expensive)
+        last_check = position.get('last_recovery_check', {}).get('hedge')
+        if last_check:
+            time_since_last = (datetime.now() - last_check).total_seconds()
+            if time_since_last < 60:
+                return None  # Too soon, skip
 
         # Check if already hedged
         if len(position['hedge_tickets']) >= MAX_HEDGES_PER_POSITION:
@@ -671,6 +693,9 @@ class RecoveryManager:
 
             position['recovery_active'] = True
 
+            # Update cooldown timestamp to prevent duplicates
+            position['last_recovery_check']['hedge'] = datetime.now()
+
             print(f"\n  ✅ HEDGE TRIGGERED!")
             print(f"  🛡️ Hedge activated for {ticket}")
             print(f"     Original: {position_type.upper()} {position['initial_volume']:.2f} (total exposure: {position['total_volume']:.2f})")
@@ -712,6 +737,13 @@ class RecoveryManager:
             return None
 
         position = self.tracked_positions[ticket]
+
+        # DUPLICATE PREVENTION: Check cooldown (30 seconds between DCA adds)
+        last_check = position.get('last_recovery_check', {}).get('dca')
+        if last_check:
+            time_since_last = (datetime.now() - last_check).total_seconds()
+            if time_since_last < 30:
+                return None  # Too soon, skip
 
         # Check if maxed out DCA levels
         if DCA_MAX_LEVELS and len(position['dca_levels']) >= DCA_MAX_LEVELS:
@@ -781,6 +813,9 @@ class RecoveryManager:
 
             position['total_volume'] += dca_volume
             position['recovery_active'] = True
+
+            # Update cooldown timestamp to prevent duplicates
+            position['last_recovery_check']['dca'] = datetime.now()
 
             print(f"📊 DCA Level {len(position['dca_levels'])} triggered for {ticket}")
             print(f"   Price: {current_price:.5f}")

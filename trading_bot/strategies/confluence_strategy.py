@@ -786,6 +786,13 @@ class ConfluenceStrategy:
 
         if not positions_to_close:
             print(f"⚠️ No positions available for partial close of {original_ticket}")
+            # FIX: Record this level as attempted to prevent spam loop
+            self.recovery_manager.record_partial_close(
+                ticket=original_ticket,
+                trigger_level=trigger_percent,
+                closed_tickets=[],  # No tickets closed
+                closed_volume=0.0   # No volume closed
+            )
             return
 
         # Calculate total volume to close for display
@@ -848,6 +855,40 @@ class ConfluenceStrategy:
             print(f"❌ DIRECTION VALIDATION FAILED: {error_msg}")
             print(f"   Blocking {action_type} trade to prevent direction mismatch bug")
             return
+
+        # MARGIN VALIDATION: Check if we have enough free margin before placing recovery order
+        account_info = self.mt5.get_account_info()
+        if account_info:
+            free_margin = account_info.get('free_margin', 0)
+            balance = account_info.get('balance', 0)
+            margin_level = account_info.get('margin_level', 0)
+
+            # Estimate required margin for this order (rough estimate: $100-150 per 0.01 lot for forex)
+            # Using conservative estimate of $150 per 0.01 lot = $15,000 per 1.0 lot
+            estimated_margin_required = volume * 15000
+
+            # Minimum margin buffer to maintain (20% of balance or $200, whichever is higher)
+            min_margin_buffer = max(balance * 0.20, 200)
+
+            # Check if we have enough margin
+            margin_after_trade = free_margin - estimated_margin_required
+
+            if margin_after_trade < min_margin_buffer:
+                print(f"❌ MARGIN CHECK FAILED - Blocking {action_type} order")
+                print(f"   Symbol: {symbol} | Volume: {volume:.2f} lots")
+                print(f"   Free margin: ${free_margin:.2f}")
+                print(f"   Estimated margin required: ${estimated_margin_required:.2f}")
+                print(f"   Margin after trade: ${margin_after_trade:.2f}")
+                print(f"   Required buffer: ${min_margin_buffer:.2f}")
+                print(f"   Margin level: {margin_level:.0f}%")
+                print(f"   💡 Recovery blocked to prevent margin call")
+                return
+
+            # Log margin check passed (only for large orders)
+            if volume >= 0.20:
+                print(f"✅ Margin check passed for {action_type}")
+                print(f"   Free margin: ${free_margin:.2f} → ${margin_after_trade:.2f} (after trade)")
+                print(f"   Buffer maintained: ${min_margin_buffer:.2f}")
 
         # Place order
         ticket = self.mt5.place_order(
@@ -1094,15 +1135,17 @@ class ConfluenceStrategy:
             len(tracked.get('dca_levels', [])) > 0
         )
 
-        # Get symbol for reporting
+        # Get symbol and initial volume for reporting and limit calculation
         symbol = tracked.get('symbol', 'UNKNOWN')
+        initial_volume = tracked.get('initial_volume', 0.08)  # Default to 0.08 if missing
 
-        # Check limit with smart recovery-aware logic
+        # Check limit with smart recovery-aware logic (3x stake)
         limit_check = self.stack_limiter.check_stack_limit(
             ticket=ticket,
             current_drawdown=current_pnl,
             recovery_active=has_recovery,
-            symbol=symbol
+            symbol=symbol,
+            initial_volume=initial_volume
         )
 
         status = limit_check['status']

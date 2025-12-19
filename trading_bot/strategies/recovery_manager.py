@@ -651,6 +651,13 @@ class RecoveryManager:
             # Round to broker step size (0.01)
             hedge_volume = round_volume_to_step(hedge_volume)
 
+            # SAFETY CAP: Prevent excessive hedge volumes on small accounts
+            # Cap hedge volumes at 0.60 lots max to prevent margin blowout
+            MAX_HEDGE_VOLUME = 0.60
+            if hedge_volume > MAX_HEDGE_VOLUME:
+                print(f"⚠️  Hedge volume capped: {hedge_volume:.2f} → {MAX_HEDGE_VOLUME:.2f} lots")
+                hedge_volume = MAX_HEDGE_VOLUME
+
             # Opposite direction
             hedge_type = 'sell' if position_type == 'buy' else 'buy'
 
@@ -742,6 +749,13 @@ class RecoveryManager:
 
             # Round to broker step size (0.01)
             dca_volume = round_volume_to_step(dca_volume)
+
+            # SAFETY CAP: Prevent excessive DCA volumes on small accounts
+            # Cap DCA volumes at 0.50 lots max to prevent margin blowout
+            MAX_DCA_VOLUME = 0.50
+            if dca_volume > MAX_DCA_VOLUME:
+                print(f"⚠️  DCA volume capped: {dca_volume:.2f} → {MAX_DCA_VOLUME:.2f} lots")
+                dca_volume = MAX_DCA_VOLUME
 
             # Check if adding this DCA would exceed total exposure limit
             if DCA_MAX_TOTAL_EXPOSURE:

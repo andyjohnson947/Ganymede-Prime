@@ -4,6 +4,7 @@ Advanced Market Regime Detector - Priority 2 Implementation
 Uses institutional-grade techniques:
 1. Hurst Exponent - Statistical measure of mean reversion vs trending
 2. VHF (Vertical Horizontal Filter) - Early trend detection
+3. ADX (Average Directional Index) - Trend strength confirmation
 
 These catch regime changes BEFORE they destroy your account.
 """
@@ -12,6 +13,7 @@ import pandas as pd
 import numpy as np
 from typing import Dict, Tuple, Optional
 from datetime import datetime
+from indicators.adx import calculate_adx
 
 
 class AdvancedRegimeDetector:
@@ -27,10 +29,13 @@ class AdvancedRegimeDetector:
         self,
         hurst_period: int = 100,
         vhf_period: int = 28,
+        adx_period: int = 14,
         hurst_ranging_threshold: float = 0.45,
-        hurst_trending_threshold: float = 0.55,
+        hurst_trending_threshold: float = 0.65,  # Raised from 0.55 - only HEAVY trends
         vhf_ranging_threshold: float = 0.25,
-        vhf_trending_threshold: float = 0.40
+        vhf_trending_threshold: float = 0.45,  # Raised from 0.40 - only HEAVY trends
+        adx_ranging_threshold: float = 20,
+        adx_trending_threshold: float = 30  # Raised from 25 - only HEAVY trends
     ):
         """
         Initialize detector
@@ -38,21 +43,27 @@ class AdvancedRegimeDetector:
         Args:
             hurst_period: Lookback for Hurst calculation (50-100 recommended)
             vhf_period: Lookback for VHF (28 standard)
+            adx_period: Period for ADX calculation (14 standard)
             hurst_ranging_threshold: H < this = ranging (0.45 default)
-            hurst_trending_threshold: H > this = trending (0.55 default)
+            hurst_trending_threshold: H > this = HEAVY trending (0.65 - more permissive)
             vhf_ranging_threshold: VHF < this = ranging (0.25 default)
-            vhf_trending_threshold: VHF > this = trending (0.40 default)
+            vhf_trending_threshold: VHF > this = HEAVY trending (0.45 - more permissive)
+            adx_ranging_threshold: ADX < this = ranging (20 default)
+            adx_trending_threshold: ADX > this = HEAVY trending (30 - more permissive)
         """
         self.hurst_period = hurst_period
         self.vhf_period = vhf_period
+        self.adx_period = adx_period
         self.hurst_ranging = hurst_ranging_threshold
         self.hurst_trending = hurst_trending_threshold
         self.vhf_ranging = vhf_ranging_threshold
         self.vhf_trending = vhf_trending_threshold
+        self.adx_ranging = adx_ranging_threshold
+        self.adx_trending = adx_trending_threshold
 
     def detect_regime(self, price_data: pd.DataFrame) -> Dict:
         """
-        Detect current market regime using Hurst + VHF
+        Detect current market regime using Hurst + VHF + ADX
 
         Args:
             price_data: DataFrame with OHLC data
@@ -66,6 +77,7 @@ class AdvancedRegimeDetector:
                 'confidence': 0.0,
                 'hurst': None,
                 'vhf': None,
+                'adx': None,
                 'reason': 'Insufficient data'
             }
 
@@ -74,14 +86,24 @@ class AdvancedRegimeDetector:
         vhf = self.calculate_vhf(price_data)
         vhf_trend = self.calculate_vhf_trend(price_data)
 
-        # Determine regime with confluence logic
-        regime, confidence, reason = self._classify_regime(hurst, vhf, vhf_trend)
+        # Calculate ADX
+        adx = None
+        try:
+            data_with_adx = calculate_adx(price_data.copy(), period=self.adx_period)
+            if 'adx' in data_with_adx.columns:
+                adx = data_with_adx['adx'].iloc[-1]
+        except Exception:
+            pass  # ADX calculation failed, will be None
+
+        # Determine regime with confluence logic (all 3 indicators)
+        regime, confidence, reason = self._classify_regime(hurst, vhf, vhf_trend, adx)
 
         return {
             'regime': regime,
             'confidence': confidence,
             'hurst': hurst,
             'vhf': vhf,
+            'adx': adx,
             'vhf_trend': vhf_trend,
             'reason': reason,
             'timestamp': datetime.now()
@@ -253,48 +275,86 @@ class AdvancedRegimeDetector:
         self,
         hurst: Optional[float],
         vhf: Optional[float],
-        vhf_trend: Optional[str]
+        vhf_trend: Optional[str],
+        adx: Optional[float]
     ) -> Tuple[str, float, str]:
         """
-        Classify regime using confluence of Hurst + VHF
+        Classify regime using confluence of Hurst + VHF + ADX
+
+        PHILOSOPHY: Only block trading in HEAVY trending markets (2+ indicators strongly agree)
+        Allow trading in slight trends / choppy markets (mean reversion can still work)
 
         Returns:
             (regime, confidence, reason)
         """
         # Handle missing data
-        if hurst is None or vhf is None:
+        if hurst is None and vhf is None and adx is None:
             return 'unknown', 0.0, 'Insufficient data for calculation'
 
+        # Count indicators voting for each regime
+        trending_votes = 0
+        ranging_votes = 0
+        details = []
+
+        # Hurst voting
+        if hurst is not None:
+            if hurst > self.hurst_trending:
+                trending_votes += 1
+                details.append(f"H:{hurst:.3f}↑")
+            elif hurst < self.hurst_ranging:
+                ranging_votes += 1
+                details.append(f"H:{hurst:.3f}↓")
+            else:
+                details.append(f"H:{hurst:.3f}~")
+
+        # VHF voting
+        if vhf is not None:
+            if vhf > self.vhf_trending:
+                trending_votes += 1
+                details.append(f"VHF:{vhf:.3f}↑")
+            elif vhf < self.vhf_ranging:
+                ranging_votes += 1
+                details.append(f"VHF:{vhf:.3f}↓")
+            else:
+                details.append(f"VHF:{vhf:.3f}~")
+
+        # ADX voting
+        if adx is not None:
+            if adx > self.adx_trending:
+                trending_votes += 1
+                details.append(f"ADX:{adx:.1f}↑")
+            elif adx < self.adx_ranging:
+                ranging_votes += 1
+                details.append(f"ADX:{adx:.1f}↓")
+            else:
+                details.append(f"ADX:{adx:.1f}~")
+
+        details_str = ", ".join(details)
+
         # CRITICAL ALERT: VHF rising rapidly = trend forming RIGHT NOW
-        if vhf_trend == 'rising' and vhf > self.vhf_ranging:
-            return 'trending', 0.95, f'VHF RISING ({vhf:.3f}) - trend forming NOW'
+        if vhf_trend == 'rising' and vhf is not None and vhf > self.vhf_ranging:
+            return 'trending', 0.85, f'VHF RISING - trend forming | {details_str}'
 
-        # Strong trending signals (both agree)
-        if hurst > self.hurst_trending and vhf > self.vhf_trending:
-            return 'trending', 0.90, f'Strong trend: H={hurst:.3f}, VHF={vhf:.3f}'
+        # HEAVY TRENDING: 2+ indicators strongly agree
+        if trending_votes >= 2:
+            confidence = 0.75 + (trending_votes - 2) * 0.10  # 75%, 85%, 95% for 2/3/3 votes
+            return 'trending', confidence, f'HEAVY trend ({trending_votes}/3 agree) | {details_str}'
 
-        # Strong ranging signals (both agree)
-        if hurst < self.hurst_ranging and vhf < self.vhf_ranging:
-            return 'ranging', 0.90, f'Strong ranging: H={hurst:.3f}, VHF={vhf:.3f}'
+        # STRONG RANGING: 2+ indicators strongly agree
+        if ranging_votes >= 2:
+            confidence = 0.75 + (ranging_votes - 2) * 0.10
+            return 'ranging', confidence, f'Strong ranging ({ranging_votes}/3 agree) | {details_str}'
 
-        # Hurst says trending, VHF says ranging (conflict - trust Hurst)
-        if hurst > self.hurst_trending and vhf < self.vhf_ranging:
-            return 'trending', 0.60, f'Hurst trending ({hurst:.3f}), VHF choppy ({vhf:.3f})'
+        # SLIGHT TREND: Only 1 indicator shows trending (allow mean reversion)
+        if trending_votes == 1:
+            return 'choppy', 0.60, f'Slight trend (1/3) - tradeable | {details_str}'
 
-        # VHF says trending, Hurst says ranging (early trend forming - CRITICAL)
-        if vhf > self.vhf_trending and hurst < self.hurst_ranging:
-            return 'trending', 0.75, f'VHF trending ({vhf:.3f}) - early trend signal'
+        # SLIGHT RANGING: Only 1 indicator shows ranging
+        if ranging_votes == 1:
+            return 'choppy', 0.60, f'Choppy ranging (1/3) - tradeable | {details_str}'
 
-        # Moderate trending (one indicator agrees)
-        if hurst > self.hurst_trending or vhf > self.vhf_trending:
-            return 'trending', 0.65, f'Moderate trend: H={hurst:.3f}, VHF={vhf:.3f}'
-
-        # Moderate ranging (one indicator agrees)
-        if hurst < self.hurst_ranging or vhf < self.vhf_ranging:
-            return 'ranging', 0.65, f'Moderate ranging: H={hurst:.3f}, VHF={vhf:.3f}'
-
-        # Middle zone (unclear)
-        return 'choppy', 0.50, f'Transitional: H={hurst:.3f}, VHF={vhf:.3f}'
+        # TRANSITIONAL: No strong signals
+        return 'choppy', 0.50, f'Transitional - tradeable | {details_str}'
 
     def is_safe_for_recovery(self, price_data: pd.DataFrame, min_confidence: float = 0.65) -> Tuple[bool, str]:
         """
@@ -330,6 +390,57 @@ class AdvancedRegimeDetector:
 
         # Unknown or low confidence - err on side of caution
         return False, f"⚠️  Uncertain regime ({regime}, conf: {confidence:.0%})"
+
+    def is_safe_for_mean_reversion(self, price_data: pd.DataFrame) -> Tuple[bool, str]:
+        """
+        Determine if market is safe for mean reversion NEW ENTRY trades
+
+        MORE PERMISSIVE than recovery check - only blocks HEAVY trending markets
+        (2+ indicators strongly agree on trending)
+
+        Philosophy: Mean reversion can work in:
+        - Ranging markets (best)
+        - Choppy markets (good)
+        - Slight trends (acceptable - might catch reversals)
+
+        Only block in:
+        - HEAVY trends (2+ indicators agree, confidence >= 75%)
+
+        Args:
+            price_data: OHLC data
+
+        Returns:
+            (is_safe, reason)
+        """
+        regime_info = self.detect_regime(price_data)
+
+        regime = regime_info['regime']
+        confidence = regime_info['confidence']
+        hurst = regime_info.get('hurst', 0)
+        vhf = regime_info.get('vhf', 0)
+        adx = regime_info.get('adx', 0)
+
+        # CRITICAL: If VHF rising RAPIDLY above trending threshold, block
+        if regime_info.get('vhf_trend') == 'rising' and vhf and vhf > self.vhf_trending:
+            return False, f"❌ VHF RISING above {self.vhf_trending:.2f} - strong trend forming | VHF: {vhf:.3f}"
+
+        # Block only HEAVY trending (2+ indicators agree, confidence >= 75%)
+        if regime == 'trending' and confidence >= 0.75:
+            return False, f"❌ HEAVY TRENDING (conf: {confidence:.0%}) | H:{hurst:.3f}, VHF:{vhf:.3f}, ADX:{adx:.1f if adx else 'N/A'}"
+
+        # Allow everything else (ranging, choppy, slight trends)
+        if regime == 'ranging':
+            return True, f"✅ RANGING - excellent for mean reversion | H:{hurst:.3f}, VHF:{vhf:.3f}, ADX:{adx:.1f if adx else 'N/A'}"
+
+        if regime == 'choppy':
+            return True, f"✅ CHOPPY - acceptable for mean reversion | H:{hurst:.3f}, VHF:{vhf:.3f}, ADX:{adx:.1f if adx else 'N/A'}"
+
+        # Even slight trending (1 indicator only) is allowed
+        if regime == 'trending' and confidence < 0.75:
+            return True, f"✅ SLIGHT trend (conf: {confidence:.0%}) - tradeable | H:{hurst:.3f}, VHF:{vhf:.3f}, ADX:{adx:.1f if adx else 'N/A'}"
+
+        # Unknown - allow (don't miss opportunities)
+        return True, f"⚠️  Uncertain regime ({regime}) - allowing trade"
 
     def get_regime_strength(self, price_data: pd.DataFrame) -> Dict:
         """

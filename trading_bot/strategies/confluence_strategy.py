@@ -531,20 +531,26 @@ class ConfluenceStrategy:
         if strategy_mode == 'mean_reversion':
             m30_data = self.market_data_cache.get(symbol, {}).get('m30')
             if m30_data is not None and not m30_data.empty:
-                is_safe, reason = self.regime_detector.is_safe_for_recovery(m30_data, min_confidence=0.60)
+                # Use new permissive check - only blocks HEAVY trending (2+ indicators agree)
+                is_safe, reason = self.regime_detector.is_safe_for_mean_reversion(m30_data)
                 if not is_safe:
                     regime_info = self.regime_detector.detect_regime(m30_data)
-                    print(f"🛑 Mean reversion blocked in TRENDING market:")
-                    print(f"   M30 Regime: {regime_info['regime'].upper()}")
-                    print(f"   Hurst: {regime_info['hurst']:.3f} (trending threshold: 0.55)")
-                    print(f"   VHF: {regime_info['vhf']:.3f} (trending threshold: 0.40)")
-                    print(f"   Confidence: {regime_info['confidence']:.0%}")
+                    print(f"🛑 Mean reversion blocked - HEAVY TRENDING market:")
+                    print(f"   M30 Regime: {regime_info['regime'].upper()} (Confidence: {regime_info['confidence']:.0%})")
+                    print(f"   Hurst: {regime_info['hurst']:.3f} (HEAVY trend threshold: > 0.65)")
+                    print(f"   VHF: {regime_info['vhf']:.3f} (HEAVY trend threshold: > 0.45)")
+                    print(f"   ADX: {regime_info['adx']:.1f if regime_info['adx'] else 'N/A'} (HEAVY trend threshold: > 30)")
                     print(f"   Reason: {reason}")
-                    print(f"   💡 Mean reversion requires RANGING markets")
-                    print(f"   💡 Wait for Hurst < 0.45 AND VHF < 0.25")
+                    print(f"   💡 Requires 2+ indicators agreeing on HEAVY trending to block")
+                    print(f"   💡 Slight trends / choppy markets are ALLOWED")
                     return
+                else:
+                    # Trade allowed - show regime info
+                    regime_info = self.regime_detector.detect_regime(m30_data)
+                    print(f"✅ Mean reversion allowed - {regime_info['regime'].upper()} market")
+                    print(f"   {reason}")
             else:
-                print("⚠️  No M30 data available for regime check")
+                print("⚠️  No M30 data available for regime check - allowing trade")
         elif strategy_mode == 'breakout':
             # Breakout trades can open in any regime (follow trend or breakout from range)
             print(f"✅ Breakout trade allowed in any regime")

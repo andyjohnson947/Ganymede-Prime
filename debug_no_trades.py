@@ -74,7 +74,8 @@ def main():
     print(f"📊 Current Positions: {len(positions) if positions else 0}")
     if positions:
         for pos in positions:
-            print(f"   #{pos['ticket']} {pos['symbol']} {pos['type_str']} {pos['volume']} @ {pos['price_open']:.5f} | P&L: ${pos['profit']:.2f}")
+            pos_type = 'BUY' if pos['type'] == 0 else 'SELL'
+            print(f"   #{pos['ticket']} {pos['symbol']} {pos_type} {pos['volume']} @ {pos['price_open']:.5f} | P&L: ${pos['profit']:.2f}")
     print()
 
     # Check position limits

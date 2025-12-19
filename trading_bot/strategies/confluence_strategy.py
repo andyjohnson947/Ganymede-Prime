@@ -520,12 +520,8 @@ class ConfluenceStrategy:
         direction = signal['direction']
         price = signal['price']
 
-        # Check if trading is suspended
-        if not self._check_trading_suspension(symbol):
-            print(f"🛑 Trading suspended for {symbol}")
-            print(f"   Reason: {self.suspension_reason}")
-            print(f"   Waiting for market to return to RANGING regime")
-            return
+        # NOTE: Trading suspension only blocks RECOVERY, not new entries
+        # New trades can open in any regime - only recovery is regime-dependent
 
         # Get account and symbol info
         account_info = self.mt5.get_account_info()

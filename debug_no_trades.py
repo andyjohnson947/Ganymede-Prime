@@ -146,8 +146,10 @@ def main():
         print(f"   Reason: {reason}\n")
 
         if not is_safe:
-            print(f"   ⚠️  WARNING: M30 regime blocking trades/recovery!")
-            print(f"   This might be why no trades are opening.\n")
+            print(f"   ⚠️  WARNING: M30 regime is TRENDING")
+            print(f"   - Mean reversion trades: BLOCKED (would fight trend)")
+            print(f"   - Breakout trades: ALLOWED (follows trend)")
+            print(f"   - Recovery actions: BLOCKED (wait for ranging)\n")
 
         # 3. Calculate VWAP for signal detection
         print(f"📊 Checking for Signals...")
@@ -216,11 +218,26 @@ def main():
                     print(f"\n   ⚠️  THIS IS WHY TRADE NOT OPENING!")
                 else:
                     print(f"   Position Size: {volume} lots")
-                    print(f"\n   ✅ ALL CHECKS PASSED - TRADE SHOULD OPEN!")
-                    print(f"\n   🤔 If bot is running and not trading, check:")
-                    print(f"   - Is trading suspended? (check bot console)")
-                    print(f"   - Is data refresh interval too long?")
-                    print(f"   - Is bot actually running the check loop?")
+
+                    # Check regime specifically for mean reversion
+                    strategy_mode = signal.get('strategy_mode', 'mean_reversion')
+                    regime_blocks = False
+
+                    if strategy_mode == 'mean_reversion' and not is_safe:
+                        regime_blocks = True
+                        print(f"\n   🛑 REGIME CHECK: BLOCKED")
+                        print(f"   Mean reversion requires RANGING markets")
+                        print(f"   Current M30 regime: TRENDING (Hurst={regime_info['hurst']:.3f}, VHF={regime_info['vhf']:.3f})")
+                        print(f"\n   ⚠️  THIS IS WHY TRADE NOT OPENING!")
+                        print(f"   💡 Wait for Hurst < 0.45 AND VHF < 0.25")
+                    elif strategy_mode == 'breakout':
+                        print(f"\n   ✅ REGIME CHECK: PASSED (breakout allowed in any regime)")
+
+                    if not regime_blocks:
+                        print(f"\n   ✅ ALL CHECKS PASSED - TRADE SHOULD OPEN!")
+                        print(f"\n   🤔 If bot is running and not trading, check:")
+                        print(f"   - Is data refresh interval too long?")
+                        print(f"   - Is bot actually running the check loop?")
 
         print()
 
@@ -232,13 +249,28 @@ def main():
 
     issues = []
 
-    # Check regime blocking
+    # Check regime blocking for mean reversion
     for symbol in SYMBOLS:
         m30_data = mt5.get_historical_data(symbol, 'M30', bars=200)
         if m30_data is not None:
             is_safe, _ = regime_detector.is_safe_for_recovery(m30_data)
             if not is_safe:
-                issues.append(f"❌ {symbol}: M30 regime showing TRENDING (blocks trades)")
+                # Check if there are mean reversion signals being blocked
+                h1_data = mt5.get_historical_data(symbol, 'H1', bars=500)
+                d1_data = mt5.get_historical_data(symbol, 'D1', bars=100)
+                w1_data = mt5.get_historical_data(symbol, 'W1', bars=50)
+
+                if h1_data is not None and d1_data is not None and w1_data is not None:
+                    h1_data_vwap = signal_detector.vwap.calculate(h1_data)
+                    signal = signal_detector.detect_signal(h1_data_vwap, d1_data, w1_data, symbol)
+
+                    if signal and signal.get('should_trade'):
+                        strategy_mode = signal.get('strategy_mode', 'mean_reversion')
+                        if strategy_mode == 'mean_reversion':
+                            issues.append(f"❌ {symbol}: M30 TRENDING blocks mean reversion (strategy_mode={strategy_mode})")
+                        else:
+                            # Breakout allowed in trending
+                            pass
 
     # Check position limits
     if positions and len(positions) >= MAX_OPEN_POSITIONS:

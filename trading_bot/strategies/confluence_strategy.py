@@ -521,7 +521,33 @@ class ConfluenceStrategy:
         price = signal['price']
 
         # NOTE: Trading suspension only blocks RECOVERY, not new entries
-        # New trades can open in any regime - only recovery is regime-dependent
+        # However, STRATEGY TYPE matters for regime:
+        # - Mean reversion should NOT trade in trending markets (fights trend)
+        # - Breakout CAN trade in trending markets (follows trend)
+
+        strategy_mode = signal.get('strategy_mode', 'mean_reversion')
+
+        # Check M30 regime for mean reversion trades
+        if strategy_mode == 'mean_reversion':
+            m30_data = self.market_data_cache.get(symbol, {}).get('m30')
+            if m30_data is not None and not m30_data.empty:
+                is_safe, reason = self.regime_detector.is_safe_for_recovery(m30_data, min_confidence=0.60)
+                if not is_safe:
+                    regime_info = self.regime_detector.detect_regime(m30_data)
+                    print(f"🛑 Mean reversion blocked in TRENDING market:")
+                    print(f"   M30 Regime: {regime_info['regime'].upper()}")
+                    print(f"   Hurst: {regime_info['hurst']:.3f} (trending threshold: 0.55)")
+                    print(f"   VHF: {regime_info['vhf']:.3f} (trending threshold: 0.40)")
+                    print(f"   Confidence: {regime_info['confidence']:.0%}")
+                    print(f"   Reason: {reason}")
+                    print(f"   💡 Mean reversion requires RANGING markets")
+                    print(f"   💡 Wait for Hurst < 0.45 AND VHF < 0.25")
+                    return
+            else:
+                print("⚠️  No M30 data available for regime check")
+        elif strategy_mode == 'breakout':
+            # Breakout trades can open in any regime (follow trend or breakout from range)
+            print(f"✅ Breakout trade allowed in any regime")
 
         # Get account and symbol info
         account_info = self.mt5.get_account_info()

@@ -265,7 +265,7 @@ class ConfluenceStrategy:
             if minutes_since < DATA_REFRESH_INTERVAL:
                 return  # Data still fresh
 
-        # Fetch H1 data
+        # Fetch H1 data (for signal detection)
         print(f"📊 Fetching {symbol} data...", end='', flush=True)
         h1_data = self.mt5.get_historical_data(symbol, TIMEFRAME, bars=500)
         if h1_data is None:
@@ -274,6 +274,12 @@ class ConfluenceStrategy:
 
         # Calculate VWAP on H1 data
         h1_data = self.signal_detector.vwap.calculate(h1_data)
+
+        # Fetch M15 data (for regime detection - more responsive for intraday)
+        m15_data = self.mt5.get_historical_data(symbol, 'M15', bars=500)
+        if m15_data is None:
+            print(" ❌ Failed to fetch M15")
+            return
 
         # Fetch HTF data
         d1_data = self.mt5.get_historical_data(symbol, 'D1', bars=100)
@@ -285,7 +291,8 @@ class ConfluenceStrategy:
 
         # Cache the data
         self.market_data_cache[symbol] = {
-            'h1': h1_data,
+            'h1': h1_data,        # For signal detection (VWAP/confluence)
+            'm15': m15_data,      # For regime detection (Hurst/VHF)
             'd1': d1_data,
             'w1': w1_data,
             'last_update': now
@@ -364,14 +371,15 @@ class ConfluenceStrategy:
                         pip_value = point
 
                     # REGIME CHECK: Only allow recovery in ranging/choppy markets
-                    h1_data = self.market_data_cache.get(symbol, {}).get('h1')
+                    # Use M15 for intraday regime detection (more responsive than H1)
+                    m15_data = self.market_data_cache.get(symbol, {}).get('m15')
                     recovery_allowed = True
 
-                    if h1_data is not None and not h1_data.empty:
-                        is_safe, reason = self.regime_detector.is_safe_for_recovery(h1_data, min_confidence=0.60)
+                    if m15_data is not None and not m15_data.empty:
+                        is_safe, reason = self.regime_detector.is_safe_for_recovery(m15_data, min_confidence=0.60)
                         if not is_safe:
                             recovery_allowed = False
-                            regime_info = self.regime_detector.detect_regime(h1_data)
+                            regime_info = self.regime_detector.detect_regime(m15_data)
 
                             # Calculate current stack loss
                             current_stack_pnl = self.recovery_manager.calculate_net_profit(ticket, all_positions)
@@ -1105,7 +1113,7 @@ class ConfluenceStrategy:
 
     def _check_trading_suspension(self, symbol: str) -> bool:
         """
-        Check if trading should resume based on market regime (Hurst + VHF)
+        Check if trading should resume based on market regime (Hurst + VHF on M15)
 
         Args:
             symbol: Trading symbol to check
@@ -1121,17 +1129,17 @@ class ConfluenceStrategy:
             return False
 
         cache = self.market_data_cache[symbol]
-        h1_data = cache.get('h1')
+        m15_data = cache.get('m15')  # Use M15 for intraday regime detection
 
-        if h1_data is None or h1_data.empty:
+        if m15_data is None or m15_data.empty:
             return False
 
-        # Use advanced regime detector (Hurst + VHF)
-        is_safe, reason = self.regime_detector.is_safe_for_recovery(h1_data, min_confidence=0.65)
+        # Use advanced regime detector (Hurst + VHF on M15)
+        is_safe, reason = self.regime_detector.is_safe_for_recovery(m15_data, min_confidence=0.65)
 
         # Resume trading if market is SAFE for recovery (ranging/choppy)
         if is_safe:
-            regime_info = self.regime_detector.detect_regime(h1_data)
+            regime_info = self.regime_detector.detect_regime(m15_data)
 
             print(f"\n{'='*80}")
             print(f"✅ TRADING SUSPENSION LIFTED")
@@ -1183,15 +1191,15 @@ class ConfluenceStrategy:
 
             # Show current market regime for all symbols
             print("\n" + "="*80)
-            print("📊 MARKET REGIME STATUS (Hurst + VHF)")
+            print("📊 MARKET REGIME STATUS (Hurst + VHF on M15)")
             print("="*80)
 
             for symbol in SYMBOLS:
                 if symbol in self.market_data_cache:
-                    h1_data = self.market_data_cache[symbol].get('h1')
-                    if h1_data is not None and not h1_data.empty:
-                        regime_info = self.regime_detector.detect_regime(h1_data)
-                        is_safe, reason = self.regime_detector.is_safe_for_recovery(h1_data, min_confidence=0.60)
+                    m15_data = self.market_data_cache[symbol].get('m15')
+                    if m15_data is not None and not m15_data.empty:
+                        regime_info = self.regime_detector.detect_regime(m15_data)
+                        is_safe, reason = self.regime_detector.is_safe_for_recovery(m15_data, min_confidence=0.60)
 
                         # Color code based on safety
                         status_icon = "✅" if is_safe else "⚠️"

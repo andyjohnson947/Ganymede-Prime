@@ -184,10 +184,10 @@ TRADE_DAYS = [0, 1, 2, 3, 4]  # Monday-Friday
 # =============================================================================
 
 # Maximum open positions
-MAX_OPEN_POSITIONS = 3  # Reduced from 10 for safety
+MAX_OPEN_POSITIONS = 12  # 6 per currency pair (EURUSD + GBPUSD)
 
 # Maximum positions per symbol
-MAX_POSITIONS_PER_SYMBOL = 2  # Allow 2 positions per symbol for intraday signals
+MAX_POSITIONS_PER_SYMBOL = 6  # Allow 6 positions per symbol for intraday stacking
 
 # =============================================================================
 # EXIT MANAGEMENT (Net Profit Target + Time Limit)

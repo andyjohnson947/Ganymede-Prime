@@ -374,7 +374,7 @@ class DiagnosticModule:
 
         # Recovery
         recovery = snapshot['recovery']
-        print(f"\n🔧 Recovery Effectiveness:")
+        print(f"\n🔧 Recovery Effectiveness (Last 7 days):")
         for rec_type in ['grid', 'hedge', 'dca']:
             metrics = recovery.get(rec_type, {})
             if metrics.get('total_triggered', 0) > 0:
@@ -382,10 +382,23 @@ class DiagnosticModule:
 
         # Stack metrics
         stack = recovery.get('stack_metrics', {})
-        print(f"\n📦 Stack Metrics:")
-        print(f"   Active stacks: {stack.get('total_stacks', 0)}")
-        print(f"   Avg drawdown: ${stack.get('avg_max_drawdown', 0):.2f}")
-        print(f"   Avg volume: {stack.get('avg_max_volume', 0):.2f} lots")
+        print(f"\n📦 Stack Metrics (Historical - Last 7 days):")
+        print(f"   Total positions with recovery: {stack.get('total_stacks', 0)}")
+        print(f"   Avg max drawdown reached: ${stack.get('avg_max_drawdown', 0):.2f}")
+        print(f"   Avg max volume used: {stack.get('avg_max_volume', 0):.2f} lots")
+
+        # Current active positions
+        if self.recovery_manager:
+            current_tracked = len(self.recovery_manager.tracked_positions)
+            if current_tracked > 0:
+                print(f"\n📍 Current Active Positions:")
+                print(f"   Tracked positions: {current_tracked}")
+
+                # Show current PnL if available
+                all_positions = self.mt5.get_positions() if hasattr(self.mt5, 'get_positions') else []
+                if all_positions:
+                    total_pnl = sum(pos.get('profit', 0) for pos in all_positions)
+                    print(f"   Total current P&L: ${total_pnl:.2f}")
 
         # Market regime (Hurst + VHF)
         market = snapshot.get('market_conditions', {})

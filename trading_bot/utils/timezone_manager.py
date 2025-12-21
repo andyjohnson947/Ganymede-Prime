@@ -9,7 +9,6 @@ conversion between broker time and working time.
 import pytz
 from datetime import datetime, time, timedelta
 from typing import Tuple, Optional
-from zoneinfo import ZoneInfo
 
 
 class TimezoneManager:
@@ -25,7 +24,7 @@ class TimezoneManager:
     """
 
     # UK timezone automatically handles GMT <-> BST (GMT+1) transitions
-    UK_TIMEZONE = ZoneInfo("Europe/London")
+    UK_TIMEZONE = pytz.timezone("Europe/London")
     GMT_TIMEZONE = pytz.UTC
 
     def __init__(self, broker_timezone: str = "UTC"):

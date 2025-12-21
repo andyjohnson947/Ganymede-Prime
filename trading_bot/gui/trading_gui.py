@@ -202,10 +202,10 @@ class TradingGUI:
         self.connection_status.pack(pady=(0, 10))
 
     def _create_control_panel(self, parent):
-        """Create bot control panel"""
+        """Create bot control panel - simplified to show current settings"""
         panel = tk.LabelFrame(
             parent,
-            text="  BOT CONTROLS  ",
+            text="  CURRENT SETTINGS  ",
             font=('Arial', 10, 'bold'),
             bg='#3a3a3a',
             fg='#ffffff',
@@ -216,91 +216,59 @@ class TradingGUI:
         )
         panel.pack(fill='x', pady=(0, 15), padx=0, ipady=5)
 
-        # Symbols
-        tk.Label(panel, text="Symbols:", bg='#3a3a3a', fg='#cccccc', font=('Arial', 9)).pack(anchor='w', padx=15, pady=(10, 2))
-        self.symbols_entry = tk.Entry(panel, bg='#2b2b2b', fg='#ffffff', insertbackground='#ffffff', relief='flat', font=('Arial', 10))
-        self.symbols_entry.insert(0, "EURUSD GBPUSD")
-        self.symbols_entry.pack(fill='x', padx=15, pady=(0, 10))
-
-        # Base Lot Size
-        tk.Label(panel, text="Base Lot Size:", bg='#3a3a3a', fg='#cccccc', font=('Arial', 9)).pack(anchor='w', padx=15, pady=(0, 2))
+        # Current Lot Size (Read-only display)
         lot_frame = tk.Frame(panel, bg='#3a3a3a')
-        lot_frame.pack(fill='x', padx=15, pady=(0, 10))
+        lot_frame.pack(fill='x', padx=15, pady=(10, 8))
 
-        self.lot_size_entry = tk.Entry(lot_frame, bg='#2b2b2b', fg='#ffffff', insertbackground='#ffffff', relief='flat', font=('Arial', 10), width=10)
-        self.lot_size_entry.pack(side='left')
-
-        # Load current value from config
-        from config.strategy_config import BASE_LOT_SIZE
-        self.lot_size_entry.insert(0, str(BASE_LOT_SIZE))
-
-        # Save button for lot size
-        save_lot_btn = tk.Button(
-            lot_frame,
-            text="Apply",
-            command=self._save_lot_size,
-            bg='#0078d4',
-            fg='#ffffff',
-            font=('Arial', 8, 'bold'),
-            relief='flat',
-            cursor='hand2',
-            activebackground='#106ebe'
-        )
-        save_lot_btn.pack(side='left', padx=(5, 0))
-
-        # Max Drawdown
-        tk.Label(panel, text="Max Drawdown (%):", bg='#3a3a3a', fg='#cccccc', font=('Arial', 9)).pack(anchor='w', padx=15, pady=(0, 2))
-        drawdown_frame = tk.Frame(panel, bg='#3a3a3a')
-        drawdown_frame.pack(fill='x', padx=15, pady=(0, 10))
-
-        self.drawdown_entry = tk.Entry(drawdown_frame, bg='#2b2b2b', fg='#ffffff', insertbackground='#ffffff', relief='flat', font=('Arial', 10), width=10)
-        self.drawdown_entry.pack(side='left')
-
-        # Load current value from config
-        from config.strategy_config import MAX_DRAWDOWN_PERCENT
-        self.drawdown_entry.insert(0, str(MAX_DRAWDOWN_PERCENT))
-
-        # Save button for drawdown
-        save_dd_btn = tk.Button(
-            drawdown_frame,
-            text="Apply",
-            command=self._save_max_drawdown,
-            bg='#e81123',
-            fg='#ffffff',
-            font=('Arial', 8, 'bold'),
-            relief='flat',
-            cursor='hand2',
-            activebackground='#c50f1f'
-        )
-        save_dd_btn.pack(side='left', padx=(5, 0))
-
-        # Info label
         tk.Label(
-            panel,
-            text="⚠️ Bot stops if equity drops this % from peak",
+            lot_frame,
+            text="Lot Size:",
             bg='#3a3a3a',
             fg='#888888',
-            font=('Arial', 8)
-        ).pack(padx=15, pady=(0, 10))
+            font=('Arial', 9)
+        ).pack(side='left')
 
-        # Trend Filter Toggle
-        self.trend_filter_var = tk.BooleanVar()
-        from config.strategy_config import TREND_FILTER_ENABLED
-        self.trend_filter_var.set(TREND_FILTER_ENABLED)
-
-        trend_check = tk.Checkbutton(
-            panel,
-            text="Enable Trend Filter (ADX + Candles)",
-            variable=self.trend_filter_var,
-            command=self._toggle_trend_filter,
+        from config.strategy_config import BASE_LOT_SIZE
+        self.lot_size_label = tk.Label(
+            lot_frame,
+            text=f"{BASE_LOT_SIZE}",
             bg='#3a3a3a',
-            fg='#cccccc',
-            selectcolor='#2b2b2b',
-            activebackground='#3a3a3a',
-            activeforeground='#ffffff',
-            font=('Arial', 9, 'bold')
+            fg='#00ff00',
+            font=('Arial', 10, 'bold')
         )
-        trend_check.pack(anchor='w', padx=15, pady=(0, 5))
+        self.lot_size_label.pack(side='right')
+
+        # Separator
+        tk.Frame(panel, bg='#555555', height=1).pack(fill='x', padx=15, pady=5)
+
+        # Trading Instruments (Read-only display)
+        instruments_frame = tk.Frame(panel, bg='#3a3a3a')
+        instruments_frame.pack(fill='x', padx=15, pady=(8, 10))
+
+        tk.Label(
+            instruments_frame,
+            text="Instruments:",
+            bg='#3a3a3a',
+            fg='#888888',
+            font=('Arial', 9)
+        ).pack(anchor='w', pady=(0, 5))
+
+        # Get configured instruments from portfolio
+        from portfolio.instruments_config import get_enabled_instruments
+        enabled_instruments = get_enabled_instruments()
+
+        # Display instruments
+        instruments_text = ", ".join(enabled_instruments) if enabled_instruments else "None configured"
+        self.instruments_label = tk.Label(
+            instruments_frame,
+            text=instruments_text,
+            bg='#3a3a3a',
+            fg='#00ff00',
+            font=('Arial', 9, 'bold'),
+            wraplength=250,
+            justify='left'
+        )
+        self.instruments_label.pack(anchor='w')
 
         # Trend filter info
         tk.Label(
@@ -737,132 +705,6 @@ class TradingGUI:
         else:
             self.connection_status.config(text="🔴 Failed", fg='#ff0000')
             self._log("❌ Failed to connect to MT5")
-
-    def _save_lot_size(self):
-        """Save the lot size to config file"""
-        try:
-            lot_size = float(self.lot_size_entry.get())
-
-            if lot_size <= 0:
-                messagebox.showerror("Error", "Lot size must be greater than 0")
-                return
-
-            if lot_size < 0.01:
-                messagebox.showwarning("Warning", "Lot size below minimum (0.01). Using 0.01.")
-                lot_size = 0.01
-
-            # Read config file
-            config_path = "trading_bot/config/strategy_config.py"
-            with open(config_path, 'r') as f:
-                content = f.read()
-
-            # Replace BASE_LOT_SIZE value
-            import re
-            pattern = r'(BASE_LOT_SIZE\s*=\s*)[0-9.]+'
-            replacement = f'\\g<1>{lot_size}'
-            new_content = re.sub(pattern, replacement, content)
-
-            # Write back to file
-            with open(config_path, 'w') as f:
-                f.write(new_content)
-
-            self._log(f"✅ Base lot size updated to {lot_size}")
-            messagebox.showinfo("Success", f"Base lot size set to {lot_size}\n\nPlease RESTART the bot for changes to take effect!")
-
-        except ValueError:
-            messagebox.showerror("Error", "Please enter a valid number for lot size")
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to save lot size: {str(e)}")
-
-    def _save_max_drawdown(self):
-        """Save the max drawdown percentage to config file"""
-        try:
-            max_dd = float(self.drawdown_entry.get())
-
-            if max_dd <= 0:
-                messagebox.showerror("Error", "Max drawdown must be greater than 0")
-                return
-
-            if max_dd > 50:
-                response = messagebox.askyesno(
-                    "Warning",
-                    f"Max drawdown of {max_dd}% is very high!\n\nThis means the bot won't stop until you lose {max_dd}% of your peak equity.\n\nAre you sure?"
-                )
-                if not response:
-                    return
-
-            # Read config file
-            config_path = "trading_bot/config/strategy_config.py"
-            with open(config_path, 'r') as f:
-                content = f.read()
-
-            # Replace MAX_DRAWDOWN_PERCENT value
-            import re
-            pattern = r'(MAX_DRAWDOWN_PERCENT\s*=\s*)[0-9.]+'
-            replacement = f'\\g<1>{max_dd}'
-            new_content = re.sub(pattern, replacement, content)
-
-            # Write back to file
-            with open(config_path, 'w') as f:
-                f.write(new_content)
-
-            self._log(f"✅ Max drawdown updated to {max_dd}%")
-            messagebox.showinfo(
-                "Success",
-                f"Max Drawdown set to {max_dd}%\n\n"
-                f"The bot will STOP ALL TRADING if your equity drops {max_dd}% from its peak.\n\n"
-                f"Please RESTART the bot for changes to take effect!"
-            )
-
-        except ValueError:
-            messagebox.showerror("Error", "Please enter a valid number for max drawdown")
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to save max drawdown: {str(e)}")
-
-    def _toggle_trend_filter(self):
-        """Toggle trend filter on/off"""
-        try:
-            enabled = self.trend_filter_var.get()
-
-            # Read config file
-            config_path = "trading_bot/config/strategy_config.py"
-            with open(config_path, 'r') as f:
-                content = f.read()
-
-            # Replace TREND_FILTER_ENABLED value
-            import re
-            pattern = r'(TREND_FILTER_ENABLED\s*=\s*)(True|False)'
-            replacement = f'\\g<1>{enabled}'
-            new_content = re.sub(pattern, replacement, content)
-
-            # Write back to file
-            with open(config_path, 'w') as f:
-                f.write(new_content)
-
-            status = "ENABLED" if enabled else "DISABLED"
-            self._log(f"✅ Trend filter {status}")
-
-            if enabled:
-                messagebox.showinfo(
-                    "Trend Filter Enabled",
-                    "Trend Filter is now ENABLED\n\n"
-                    "The bot will check:\n"
-                    "• ADX (trend strength)\n"
-                    "• Recent candle direction\n\n"
-                    "And SKIP trades in strong trending markets.\n\n"
-                    "Please RESTART the bot for changes to take effect!"
-                )
-            else:
-                messagebox.showwarning(
-                    "Trend Filter Disabled",
-                    "Trend Filter is now DISABLED\n\n"
-                    "⚠️ WARNING: Mean reversion strategies can fail badly in strong trends!\n\n"
-                    "Only disable if you know what you're doing.\n\n"
-                    "Please RESTART the bot for changes to take effect!"
-                )
-
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to toggle trend filter: {str(e)}")
 
     def _reload_config(self):
         """Reload configuration without restarting bot"""

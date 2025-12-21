@@ -66,10 +66,10 @@ INSTRUMENTS = {
         ]
     },
 
-    # DAX (Germany 40)
-    'GER40': {
+    # DAX (Germany 30)
+    'GER30': {
         'name': 'DAX',
-        'symbol': 'GER40',
+        'symbol': 'GER30',
         'enabled': True,
         'windows': [
             {
@@ -142,10 +142,10 @@ INSTRUMENTS = {
         ]
     },
 
-    # NASDAQ (US100)
-    'US100': {
+    # NASDAQ (NDAQ)
+    'NDAQ': {
         'name': 'NASDAQ',
-        'symbol': 'US100',
+        'symbol': 'NDAQ',
         'enabled': True,
         'windows': [
             {

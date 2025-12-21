@@ -241,34 +241,29 @@ class TradingGUI:
         # Separator
         tk.Frame(panel, bg='#555555', height=1).pack(fill='x', padx=15, pady=5)
 
-        # Trading Instruments (Read-only display)
+        # Trading Instruments (Dynamic - updates in real-time)
         instruments_frame = tk.Frame(panel, bg='#3a3a3a')
         instruments_frame.pack(fill='x', padx=15, pady=(8, 10))
 
         tk.Label(
             instruments_frame,
-            text="Instruments:",
+            text="Tradeable Now:",
             bg='#3a3a3a',
             fg='#888888',
             font=('Arial', 9)
         ).pack(anchor='w', pady=(0, 5))
 
-        # Get configured instruments from portfolio
-        from portfolio.instruments_config import get_enabled_instruments
-        enabled_instruments = get_enabled_instruments()
-
-        # Display instruments
-        instruments_text = ", ".join(enabled_instruments) if enabled_instruments else "None configured"
-        self.instruments_label = tk.Label(
+        # Dynamic label - updates every second with currently tradeable instruments
+        self.control_instruments_label = tk.Label(
             instruments_frame,
-            text=instruments_text,
+            text="Loading...",
             bg='#3a3a3a',
             fg='#00ff00',
             font=('Arial', 9, 'bold'),
             wraplength=250,
             justify='left'
         )
-        self.instruments_label.pack(anchor='w')
+        self.control_instruments_label.pack(anchor='w')
 
         # Trend filter info
         tk.Label(
@@ -852,15 +847,32 @@ class TradingGUI:
 
                 if tradeable_symbols:
                     instruments_text = ", ".join(tradeable_symbols)
+
+                    # Update portfolio panel
                     self.tradeable_instruments_label.config(
                         text=instruments_text,
                         fg='#00ff00'
                     )
+
+                    # Update control panel instruments (dynamic)
+                    if hasattr(self, 'control_instruments_label'):
+                        self.control_instruments_label.config(
+                            text=instruments_text,
+                            fg='#00ff00'
+                        )
                 else:
+                    # No instruments tradeable right now
                     self.tradeable_instruments_label.config(
                         text="None (outside trading windows)",
                         fg='#ffaa00'
                     )
+
+                    # Update control panel
+                    if hasattr(self, 'control_instruments_label'):
+                        self.control_instruments_label.config(
+                            text="None (outside windows)",
+                            fg='#ffaa00'
+                        )
 
                 # Check trading calendar status
                 from utils.trading_calendar import get_trading_calendar

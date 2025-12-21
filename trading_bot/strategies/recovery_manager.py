@@ -595,3 +595,147 @@ class RecoveryManager:
             return True
 
         return False
+
+    def calculate_partial_close_volume(
+        self,
+        current_volume: float,
+        close_percentage: float = 0.5,
+        min_lot: float = 0.01,
+        lot_step: float = 0.01
+    ) -> float:
+        """
+        Calculate volume for partial close based on new lot size (0.04).
+
+        Args:
+            current_volume: Current position volume
+            close_percentage: Percentage to close (0.0 to 1.0)
+            min_lot: Minimum lot size allowed
+            lot_step: Lot size step
+
+        Returns:
+            Volume to close (rounded to lot step)
+        """
+        close_volume = current_volume * close_percentage
+
+        # Round to lot step
+        close_volume = round_volume_to_step(
+            close_volume,
+            step=lot_step,
+            min_lot=min_lot
+        )
+
+        # Ensure we're closing at least minimum lot
+        if close_volume < min_lot:
+            close_volume = min_lot
+
+        # Ensure we don't close more than current volume
+        if close_volume > current_volume:
+            close_volume = current_volume
+
+        return close_volume
+
+    def get_recommended_partial_close(
+        self,
+        ticket: int,
+        current_profit: float,
+        profit_threshold: float = 0.0
+    ) -> Optional[Dict]:
+        """
+        Get recommendation for partial close based on profit.
+
+        With the new 0.04 lot size, partial closes are adjusted:
+        - 0.04 lot → close 0.02 (50%)
+        - 0.08 lot → close 0.04 (50%)
+        - 0.12 lot → close 0.06 (50%)
+
+        Args:
+            ticket: Position ticket
+            current_profit: Current profit in dollars
+            profit_threshold: Minimum profit to trigger partial close
+
+        Returns:
+            Dictionary with partial close recommendation or None
+        """
+        if ticket not in self.tracked_positions:
+            return None
+
+        position = self.tracked_positions[ticket]
+        total_volume = position['total_volume']
+
+        # Check if profit threshold met
+        if current_profit < profit_threshold:
+            return None
+
+        # Calculate volumes for different scenarios
+        half_close = self.calculate_partial_close_volume(total_volume, 0.5)
+        quarter_close = self.calculate_partial_close_volume(total_volume, 0.25)
+        three_quarter_close = self.calculate_partial_close_volume(total_volume, 0.75)
+
+        # Determine recommended close amount based on profit
+        if current_profit >= profit_threshold * 3:
+            # High profit - take most off the table
+            recommended_volume = three_quarter_close
+            reason = "High profit - securing 75% of position"
+        elif current_profit >= profit_threshold * 2:
+            # Good profit - take half
+            recommended_volume = half_close
+            reason = "Good profit - securing 50% of position"
+        else:
+            # Minimum profit - take quarter
+            recommended_volume = quarter_close
+            reason = "Minimum profit threshold - securing 25% of position"
+
+        return {
+            'ticket': ticket,
+            'current_volume': total_volume,
+            'close_volume': recommended_volume,
+            'remaining_volume': total_volume - recommended_volume,
+            'close_percentage': (recommended_volume / total_volume) * 100,
+            'current_profit': current_profit,
+            'reason': reason,
+            'options': {
+                'quarter': quarter_close,
+                'half': half_close,
+                'three_quarter': three_quarter_close
+            }
+        }
+
+    def should_partial_close(
+        self,
+        ticket: int,
+        current_profit: float,
+        min_profit_for_partial: float = 5.0
+    ) -> bool:
+        """
+        Determine if position should be partially closed.
+
+        Args:
+            ticket: Position ticket
+            current_profit: Current profit in dollars
+            min_profit_for_partial: Minimum profit to trigger partial close
+
+        Returns:
+            True if should partially close
+        """
+        if ticket not in self.tracked_positions:
+            return False
+
+        position = self.tracked_positions[ticket]
+
+        # Only partial close if:
+        # 1. Position is profitable above threshold
+        # 2. Position has recovery levels active (want to reduce risk)
+        # 3. Total volume is > 0.04 (enough to partially close)
+
+        has_recovery = (
+            len(position['grid_levels']) > 0 or
+            len(position['hedge_tickets']) > 0 or
+            len(position['dca_levels']) > 0
+        )
+
+        return (
+            current_profit >= min_profit_for_partial and
+            has_recovery and
+            position['total_volume'] > 0.04
+        )
+

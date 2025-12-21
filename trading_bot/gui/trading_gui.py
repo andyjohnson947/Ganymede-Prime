@@ -12,6 +12,8 @@ from typing import Optional
 from core.mt5_manager import MT5Manager
 from strategies.confluence_strategy import ConfluenceStrategy
 from utils.credential_store import CredentialStore
+from utils.timezone_manager import get_timezone_manager, format_trading_time
+from portfolio.portfolio_manager import PortfolioManager
 
 
 class TradingGUI:
@@ -100,6 +102,9 @@ class TradingGUI:
 
         self._create_stats_panel(stats_row)
         self._create_risk_panel(stats_row)
+
+        # Trading Windows Panel
+        self._create_portfolio_panel(right_column)
 
         # Positions Table
         self._create_positions_panel(right_column)
@@ -509,6 +514,91 @@ class TradingGUI:
             value_label.pack(side='right')
             self.risk_labels[key] = (value_label, suffix)
 
+    def _create_portfolio_panel(self, parent):
+        """Create portfolio/trading windows panel"""
+        panel = tk.LabelFrame(
+            parent,
+            text="  TRADING WINDOWS (GMT/GMT+1)  ",
+            font=('Arial', 10, 'bold'),
+            bg='#3a3a3a',
+            fg='#ffffff',
+            bd=0,
+            relief='flat',
+            padx=10,
+            pady=10
+        )
+        panel.pack(fill='x', pady=(0, 15))
+
+        # Create portfolio status display
+        status_frame = tk.Frame(panel, bg='#3a3a3a')
+        status_frame.pack(fill='x', padx=5, pady=5)
+
+        # Current time display (timezone-aware)
+        time_frame = tk.Frame(status_frame, bg='#3a3a3a')
+        time_frame.pack(fill='x', pady=(0, 10))
+
+        tk.Label(
+            time_frame,
+            text="Current Time:",
+            bg='#3a3a3a',
+            fg='#888888',
+            font=('Arial', 9)
+        ).pack(side='left')
+
+        self.portfolio_time_label = tk.Label(
+            time_frame,
+            text="--:--:-- GMT",
+            bg='#3a3a3a',
+            fg='#00ff00',
+            font=('Arial', 9, 'bold')
+        )
+        self.portfolio_time_label.pack(side='left', padx=(10, 0))
+
+        # Tradeable instruments display
+        instruments_frame = tk.Frame(status_frame, bg='#3a3a3a')
+        instruments_frame.pack(fill='x', pady=(0, 10))
+
+        tk.Label(
+            instruments_frame,
+            text="Tradeable Now:",
+            bg='#3a3a3a',
+            fg='#888888',
+            font=('Arial', 9)
+        ).pack(side='left')
+
+        self.tradeable_instruments_label = tk.Label(
+            instruments_frame,
+            text="Loading...",
+            bg='#3a3a3a',
+            fg='#00ff00',
+            font=('Arial', 9, 'bold')
+        )
+        self.tradeable_instruments_label.pack(side='left', padx=(10, 0))
+
+        # Trading restrictions display
+        restrictions_frame = tk.Frame(status_frame, bg='#3a3a3a')
+        restrictions_frame.pack(fill='x')
+
+        tk.Label(
+            restrictions_frame,
+            text="Status:",
+            bg='#3a3a3a',
+            fg='#888888',
+            font=('Arial', 9)
+        ).pack(side='left')
+
+        self.trading_status_label = tk.Label(
+            restrictions_frame,
+            text="Checking...",
+            bg='#3a3a3a',
+            fg='#00ff00',
+            font=('Arial', 9, 'bold')
+        )
+        self.trading_status_label.pack(side='left', padx=(10, 0))
+
+        # Initialize portfolio manager
+        self.portfolio_manager = PortfolioManager()
+
     def _create_positions_panel(self, parent):
         """Create positions table panel"""
         panel = tk.LabelFrame(
@@ -893,6 +983,9 @@ class TradingGUI:
                 self.risk_labels['exposure_pct'][0].config(text=f"{risk.get('exposure_pct', 0):.1f}%")
                 self.risk_labels['positions_count'][0].config(text=str(risk.get('positions_count', 0)))
 
+                # Update portfolio/trading windows panel
+                self._update_portfolio_panel()
+
                 # Update positions
                 self._update_positions_table(status['positions'], status['recovery_status'])
 
@@ -900,6 +993,56 @@ class TradingGUI:
                 self._log(f"❌ Error updating display: {e}")
 
         self.root.after(1000, self._update_display)
+
+    def _update_portfolio_panel(self):
+        """Update portfolio/trading windows panel with current status"""
+        try:
+            tz_mgr = get_timezone_manager()
+            current_time = tz_mgr.get_current_trading_timezone()
+
+            # Update time display with timezone
+            time_str = format_trading_time(current_time)
+            self.portfolio_time_label.config(text=time_str)
+
+            # Get tradeable instruments
+            if hasattr(self, 'portfolio_manager'):
+                tradeable_symbols = self.portfolio_manager.get_tradeable_symbols(current_time)
+
+                if tradeable_symbols:
+                    instruments_text = ", ".join(tradeable_symbols)
+                    self.tradeable_instruments_label.config(
+                        text=instruments_text,
+                        fg='#00ff00'
+                    )
+                else:
+                    self.tradeable_instruments_label.config(
+                        text="None (outside trading windows)",
+                        fg='#ffaa00'
+                    )
+
+                # Check trading calendar status
+                from utils.trading_calendar import get_trading_calendar
+                calendar = get_trading_calendar()
+                is_allowed, reason = calendar.is_trading_allowed(current_time)
+
+                if is_allowed:
+                    self.trading_status_label.config(
+                        text="✓ Trading Allowed",
+                        fg='#00ff00'
+                    )
+                else:
+                    self.trading_status_label.config(
+                        text=f"✗ {reason}",
+                        fg='#ff0000'
+                    )
+            else:
+                self.tradeable_instruments_label.config(text="Portfolio manager not initialized")
+                self.trading_status_label.config(text="N/A")
+
+        except Exception as e:
+            self.portfolio_time_label.config(text="Error")
+            self.tradeable_instruments_label.config(text=f"Error: {str(e)}")
+            self.trading_status_label.config(text="Error")
 
     def _update_positions_table(self, positions, recovery_status):
         """Update positions treeview"""

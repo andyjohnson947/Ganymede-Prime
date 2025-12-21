@@ -7,6 +7,7 @@ All discovered from EA analysis of 428 trades
 from typing import Dict, List, Optional
 from datetime import datetime
 
+from utils.timezone_manager import get_current_time
 from config.strategy_config import (
     GRID_ENABLED,
     GRID_SPACING_PIPS,
@@ -83,7 +84,7 @@ class RecoveryManager:
             'total_volume': volume,
             'max_underwater_pips': 0,
             'recovery_active': False,
-            'open_time': datetime.now(),  # Track when position opened
+            'open_time': get_current_time(),  # Track when position opened
         }
 
     def untrack_position(self, ticket: int):
@@ -177,7 +178,7 @@ class RecoveryManager:
             position['grid_levels'].append({
                 'price': grid_price,
                 'volume': grid_volume,
-                'time': datetime.now()
+                'time': get_current_time()
             })
 
             position['total_volume'] += grid_volume
@@ -255,7 +256,7 @@ class RecoveryManager:
                 'type': hedge_type,
                 'volume': hedge_volume,
                 'trigger_pips': pips_underwater,
-                'time': datetime.now()
+                'time': get_current_time()
             })
 
             position['recovery_active'] = True
@@ -335,7 +336,7 @@ class RecoveryManager:
                 'price': current_price,
                 'volume': dca_volume,
                 'level': len(position['dca_levels']) + 1,
-                'time': datetime.now()
+                'time': get_current_time()
             })
 
             position['total_volume'] += dca_volume
@@ -583,7 +584,7 @@ class RecoveryManager:
             return False
 
         # Calculate hours open
-        time_open = datetime.now() - open_time
+        time_open = get_current_time() - open_time
         hours_open = time_open.total_seconds() / 3600
 
         if hours_open >= hours_limit:

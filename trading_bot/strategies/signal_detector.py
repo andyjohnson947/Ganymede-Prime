@@ -7,6 +7,8 @@ import pandas as pd
 from typing import Dict, Optional, List
 from datetime import datetime
 
+from utils.timezone_manager import get_current_time
+from utils.trading_calendar import get_trading_calendar
 from indicators.vwap import VWAP
 from indicators.volume_profile import VolumeProfile
 from indicators.htf_levels import HTFLevels
@@ -61,7 +63,7 @@ class SignalDetector:
         # Initialize signal
         signal = {
             'symbol': symbol,
-            'timestamp': datetime.now(),
+            'timestamp': get_current_time(),
             'price': price,
             'direction': None,
             'confluence_score': 0,
@@ -71,6 +73,14 @@ class SignalDetector:
             'vp_signals': {},
             'htf_signals': {}
         }
+
+        # Check trading calendar restrictions (bank holidays, weekends, Friday afternoons)
+        calendar = get_trading_calendar()
+        is_allowed, reason = calendar.is_trading_allowed(signal['timestamp'])
+        if not is_allowed:
+            signal['should_trade'] = False
+            signal['reject_reason'] = reason
+            return None  # Don't trade during restricted periods
 
         # Calculate indicators if not already done
         if 'vwap' not in current_data.columns:

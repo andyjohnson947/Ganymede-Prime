@@ -13,6 +13,8 @@ from strategies.signal_detector import SignalDetector
 from strategies.recovery_manager import RecoveryManager
 from utils.risk_calculator import RiskCalculator
 from utils.config_reloader import reload_config, print_current_config
+from utils.timezone_manager import get_current_time
+from portfolio.portfolio_manager import PortfolioManager
 from config.strategy_config import (
     SYMBOLS,
     TIMEFRAME,
@@ -39,6 +41,7 @@ class ConfluenceStrategy:
         self.signal_detector = SignalDetector()
         self.recovery_manager = RecoveryManager()
         self.risk_calculator = RiskCalculator()
+        self.portfolio_manager = PortfolioManager()
 
         self.running = False
         self.last_data_refresh = {}
@@ -136,7 +139,7 @@ class ConfluenceStrategy:
 
     def _refresh_market_data(self, symbol: str):
         """Refresh market data for symbol if needed"""
-        now = datetime.now()
+        now = get_current_time()
         last_refresh = self.last_data_refresh.get(symbol)
 
         # Check if refresh needed
@@ -173,6 +176,19 @@ class ConfluenceStrategy:
     def _manage_positions(self, symbol: str):
         """Manage existing positions for symbol"""
         positions = self.mt5.get_positions(symbol)
+
+        # Check for trading window closures - close negative positions if window is ending
+        close_actions = self.portfolio_manager.check_window_closures()
+        for action in close_actions:
+            if action.symbol == symbol and action.close_negatives_only:
+                # Close all negative positions for this symbol
+                for pos in positions:
+                    if pos['profit'] < 0:
+                        ticket = pos['ticket']
+                        print(f"🚪 Closing negative position {ticket} - {action.reason}")
+                        if self.mt5.close_position(ticket):
+                            self.recovery_manager.untrack_position(ticket)
+                            self.stats['trades_closed'] += 1
 
         for position in positions:
             ticket = position['ticket']
@@ -254,6 +270,10 @@ class ConfluenceStrategy:
         """Check for new entry signals"""
         if symbol not in self.market_data_cache:
             return
+
+        # Check if symbol is tradeable based on portfolio trading windows
+        if not self.portfolio_manager.is_symbol_tradeable(symbol):
+            return  # Not in trading window for this symbol
 
         cache = self.market_data_cache[symbol]
         h1_data = cache['h1']

@@ -758,12 +758,16 @@ class TradingGUI:
             messagebox.showerror("Error", "Please connect to MT5 first")
             return
 
-        symbols = self.symbols_entry.get().split()
+        # Get symbols from portfolio configuration
+        from portfolio.instruments_config import get_enabled_instruments
+        symbols = get_enabled_instruments()
+
         if not symbols:
-            messagebox.showerror("Error", "Please enter at least one symbol")
+            messagebox.showerror("Error", "No instruments configured in portfolio")
             return
 
-        self._log(f"🚀 Starting bot with symbols: {', '.join(symbols)}")
+        self._log(f"🚀 Starting bot with instruments: {', '.join(symbols)}")
+        self._log(f"   Trading windows will be enforced for each instrument")
 
         self.is_running = True
         self.strategy_thread = threading.Thread(

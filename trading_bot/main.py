@@ -10,10 +10,34 @@ Usage:
 
 import argparse
 import sys
+import os
 from pathlib import Path
+
+# CACHE CLEARING - Force Python to reload modules on every start
+# This ensures code changes are always picked up without needing to restart Python interpreter
+import importlib
+if hasattr(importlib, 'invalidate_caches'):
+    importlib.invalidate_caches()
+
+# Clear __pycache__ for trading_bot modules to force fresh imports
+def clear_pycache():
+    """Clear Python cache files to ensure fresh module imports"""
+    current_dir = Path(__file__).parent
+    for pycache_dir in current_dir.rglob('__pycache__'):
+        for cache_file in pycache_dir.glob('*.pyc'):
+            try:
+                cache_file.unlink()
+            except Exception:
+                pass
+
+# Clear cache on startup
+clear_pycache()
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))
+
+# Disable Python bytecode generation (optional - prevents .pyc creation)
+sys.dont_write_bytecode = True
 
 from core.mt5_manager import MT5Manager
 from strategies.confluence_strategy import ConfluenceStrategy
@@ -78,6 +102,8 @@ def main():
     print("     Timezone-Aware | Instrument-Specific Trading Windows")
     print("=" * 80)
     print()
+    print("🔄 Cache Status: CLEARED (Fresh imports enabled)")
+    print()
     print("Strategy Parameters:")
     print("  • Win Rate: 64.3%")
     print("  • Minimum Confluence Score: 4")
@@ -90,6 +116,7 @@ def main():
     print("  ✓ Trading Windows: Instrument-specific entry/exit times")
     print("  ✓ Restrictions: No bank holidays, weekends, Friday afternoons")
     print("  ✓ Auto-close negative positions at window end")
+    print("  ✓ Auto cache clearing: Code changes always picked up")
     print()
     print("=" * 80)
     print()

@@ -8,7 +8,7 @@ from typing import Dict, List, Optional
 from datetime import datetime
 
 from utils.timezone_manager import get_current_time
-from portfolio.instruments_config import get_recovery_settings
+from portfolio.instruments_config import get_recovery_settings, get_take_profit_settings
 from config.strategy_config import (
     GRID_ENABLED,
     GRID_SPACING_PIPS,      # Fallback default
@@ -681,21 +681,18 @@ class RecoveryManager:
     def get_recommended_partial_close(
         self,
         ticket: int,
-        current_profit: float,
-        profit_threshold: float = 0.0
+        current_price: float,
+        pip_value: float = 0.0001
     ) -> Optional[Dict]:
         """
-        Get recommendation for partial close based on profit.
+        Get recommendation for partial close based on instrument-specific TP settings.
 
-        With the new 0.04 lot size, partial closes are adjusted:
-        - 0.04 lot → close 0.02 (50%)
-        - 0.08 lot → close 0.04 (50%)
-        - 0.12 lot → close 0.06 (50%)
+        Uses instrument-specific take profit levels instead of fixed dollar amounts.
 
         Args:
             ticket: Position ticket
-            current_profit: Current profit in dollars
-            profit_threshold: Minimum profit to trigger partial close
+            current_price: Current market price
+            pip_value: Pip value for symbol (0.0001 for most pairs, 0.01 for JPY)
 
         Returns:
             Dictionary with partial close recommendation or None
@@ -704,44 +701,65 @@ class RecoveryManager:
             return None
 
         position = self.tracked_positions[ticket]
+        symbol = position['symbol']
+        entry_price = position['entry_price']
+        position_type = position['type']
         total_volume = position['total_volume']
 
-        # Check if profit threshold met
-        if current_profit < profit_threshold:
+        # Get instrument-specific take profit settings
+        try:
+            tp_settings = get_take_profit_settings(symbol)
+        except (KeyError, Exception):
+            # Fallback to basic logic if no TP settings
             return None
 
-        # Calculate volumes for different scenarios
-        half_close = self.calculate_partial_close_volume(total_volume, 0.5)
-        quarter_close = self.calculate_partial_close_volume(total_volume, 0.25)
-        three_quarter_close = self.calculate_partial_close_volume(total_volume, 0.75)
-
-        # Determine recommended close amount based on profit
-        if current_profit >= profit_threshold * 3:
-            # High profit - take most off the table
-            recommended_volume = three_quarter_close
-            reason = "High profit - securing 75% of position"
-        elif current_profit >= profit_threshold * 2:
-            # Good profit - take half
-            recommended_volume = half_close
-            reason = "Good profit - securing 50% of position"
+        # Calculate pips in profit
+        if position_type == 'buy':
+            pips_profit = (current_price - entry_price) / pip_value
         else:
-            # Minimum profit - take quarter
-            recommended_volume = quarter_close
-            reason = "Minimum profit threshold - securing 25% of position"
+            pips_profit = (entry_price - current_price) / pip_value
+
+        # Check if in profit
+        if pips_profit <= 0:
+            return None
+
+        # Check TP levels and recommend partial closes
+        partial_2_pips = tp_settings['partial_2_pips']
+        partial_2_percent = tp_settings['partial_2_percent']
+        partial_1_pips = tp_settings['partial_1_pips']
+        partial_1_percent = tp_settings['partial_1_percent']
+        full_tp_pips = tp_settings['full_tp_pips']
+
+        # Determine recommended close based on instrument-specific TP levels
+        if pips_profit >= full_tp_pips:
+            # Full TP reached - close entire position
+            recommended_volume = total_volume
+            close_percent = 1.0
+            reason = f"Full TP {full_tp_pips} pips reached - closing 100%"
+        elif pips_profit >= partial_2_pips:
+            # Second partial TP - close percentage from settings
+            recommended_volume = self.calculate_partial_close_volume(total_volume, partial_2_percent)
+            close_percent = partial_2_percent
+            reason = f"Partial TP {partial_2_pips} pips reached - closing {int(partial_2_percent*100)}%"
+        elif pips_profit >= partial_1_pips:
+            # First partial TP - close percentage from settings
+            recommended_volume = self.calculate_partial_close_volume(total_volume, partial_1_percent)
+            close_percent = partial_1_percent
+            reason = f"Partial TP {partial_1_pips} pips reached - closing {int(partial_1_percent*100)}%"
+        else:
+            # Not at any TP level yet
+            return None
 
         return {
             'ticket': ticket,
+            'symbol': symbol,
             'current_volume': total_volume,
             'close_volume': recommended_volume,
             'remaining_volume': total_volume - recommended_volume,
-            'close_percentage': (recommended_volume / total_volume) * 100,
-            'current_profit': current_profit,
-            'reason': reason,
-            'options': {
-                'quarter': quarter_close,
-                'half': half_close,
-                'three_quarter': three_quarter_close
-            }
+            'close_percentage': close_percent * 100,
+            'pips_profit': pips_profit,
+            'tp_level_hit': f"{pips_profit:.1f} pips",
+            'reason': reason
         }
 
     def should_partial_close(

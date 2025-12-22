@@ -32,6 +32,15 @@ INSTRUMENTS = {
             'max_grid_levels': 4,
             'max_dca_levels': 3,
         },
+        # Take profit settings
+        'take_profit': {
+            'partial_1_pips': 15,         # 25% close at 15 pips
+            'partial_1_percent': 0.25,
+            'partial_2_pips': 30,         # 50% close at 30 pips
+            'partial_2_percent': 0.50,
+            'full_tp_pips': 50,           # Close all at 50 pips
+            'vwap_exit_enabled': True,
+        },
         'windows': [
             {
                 'name': 'Tokyo-London Transition',
@@ -68,6 +77,15 @@ INSTRUMENTS = {
             'max_grid_levels': 4,
             'max_dca_levels': 3,
         },
+        # Take profit settings
+        'take_profit': {
+            'partial_1_pips': 30,         # 25% close at 30 points
+            'partial_1_percent': 0.25,
+            'partial_2_pips': 60,         # 50% close at 60 points
+            'partial_2_percent': 0.50,
+            'full_tp_pips': 100,          # Close all at 100 points
+            'vwap_exit_enabled': True,
+        },
         'windows': [
             {
                 'name': 'Morning Correction',
@@ -94,6 +112,15 @@ INSTRUMENTS = {
             'dca_multiplier': 1.5,
             'max_grid_levels': 4,
             'max_dca_levels': 3,
+        },
+        # Take profit settings
+        'take_profit': {
+            'partial_1_pips': 40,         # 25% close at 40 points
+            'partial_1_percent': 0.25,
+            'partial_2_pips': 80,         # 50% close at 80 points
+            'partial_2_percent': 0.50,
+            'full_tp_pips': 130,          # Close all at 130 points
+            'vwap_exit_enabled': True,
         },
         'windows': [
             {
@@ -122,6 +149,15 @@ INSTRUMENTS = {
             'max_grid_levels': 4,
             'max_dca_levels': 3,
         },
+        # Take profit settings
+        'take_profit': {
+            'partial_1_pips': 12,         # 25% close at 12 pips
+            'partial_1_percent': 0.25,
+            'partial_2_pips': 25,         # 50% close at 25 pips
+            'partial_2_percent': 0.50,
+            'full_tp_pips': 40,           # Close all at 40 pips
+            'vwap_exit_enabled': True,
+        },
         'windows': [
             {
                 'name': 'Post-London Open',
@@ -148,6 +184,15 @@ INSTRUMENTS = {
             'dca_multiplier': 1.5,
             'max_grid_levels': 4,
             'max_dca_levels': 3,
+        },
+        # Take profit settings
+        'take_profit': {
+            'partial_1_pips': 18,         # 25% close at 18 pips
+            'partial_1_percent': 0.25,
+            'partial_2_pips': 35,         # 50% close at 35 pips
+            'partial_2_percent': 0.50,
+            'full_tp_pips': 55,           # Close all at 55 pips
+            'vwap_exit_enabled': True,
         },
         'windows': [
             {
@@ -176,6 +221,15 @@ INSTRUMENTS = {
             'max_grid_levels': 4,
             'max_dca_levels': 3,
         },
+        # Take profit settings
+        'take_profit': {
+            'partial_1_pips': 25,         # 25% close at 25 points
+            'partial_1_percent': 0.25,
+            'partial_2_pips': 50,         # 50% close at 50 points
+            'partial_2_percent': 0.50,
+            'full_tp_pips': 80,           # Close all at 80 points
+            'vwap_exit_enabled': True,
+        },
         'windows': [
             {
                 'name': 'Afternoon Fade',
@@ -202,6 +256,15 @@ INSTRUMENTS = {
             'dca_multiplier': 1.5,
             'max_grid_levels': 4,
             'max_dca_levels': 3,
+        },
+        # Take profit settings
+        'take_profit': {
+            'partial_1_pips': 60,         # 25% close at 60 points
+            'partial_1_percent': 0.25,
+            'partial_2_pips': 120,        # 50% close at 120 points
+            'partial_2_percent': 0.50,
+            'full_tp_pips': 200,          # Close all at 200 points
+            'vwap_exit_enabled': True,
         },
         'windows': [
             {
@@ -290,6 +353,28 @@ def get_recovery_settings(symbol: str) -> Dict[str, Any]:
         raise KeyError(f"Instrument '{symbol}' has no recovery settings configured")
 
     return INSTRUMENTS[symbol]['recovery']
+
+
+def get_take_profit_settings(symbol: str) -> Dict[str, Any]:
+    """
+    Get take profit settings for a specific instrument.
+
+    Args:
+        symbol: Instrument symbol
+
+    Returns:
+        Dictionary with take profit settings (partial_1_pips, partial_2_pips, etc.)
+
+    Raises:
+        KeyError: If instrument not found or has no take profit settings
+    """
+    if symbol not in INSTRUMENTS:
+        raise KeyError(f"Instrument '{symbol}' not found in configuration")
+
+    if 'take_profit' not in INSTRUMENTS[symbol]:
+        raise KeyError(f"Instrument '{symbol}' has no take profit settings configured")
+
+    return INSTRUMENTS[symbol]['take_profit']
 
 
 def get_instruments_by_strategy_type(strategy_type: str) -> List[str]:

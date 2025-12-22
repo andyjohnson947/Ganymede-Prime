@@ -22,12 +22,13 @@ def main():
 
     # Get current times
     current_time_uk = tz_manager.get_current_trading_timezone()
-    current_time_gmt = tz_manager.convert_to_gmt(current_time_uk)
+    current_time_gmt = tz_manager.get_gmt_time()
     is_dst = tz_manager.is_dst_active()
+    tz_name = tz_manager.get_timezone_name()
 
     print(f"\n📅 CURRENT TIME:")
-    print(f"   Local (UK):  {current_time_uk.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-    print(f"   GMT:         {current_time_gmt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+    print(f"   Local (UK):  {current_time_uk.strftime('%Y-%m-%d %H:%M:%S')} {tz_name}")
+    print(f"   Pure GMT:    {current_time_gmt.strftime('%Y-%m-%d %H:%M:%S')} UTC")
     print(f"   DST Active:  {'Yes (GMT+1/BST)' if is_dst else 'No (GMT)'}")
     print(f"   Offset:      UTC{current_time_uk.strftime('%z')}")
 

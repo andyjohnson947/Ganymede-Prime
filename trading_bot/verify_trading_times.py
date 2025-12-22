@@ -45,24 +45,21 @@ def main():
     print(f"\n💹 CURRENTLY TRADEABLE INSTRUMENTS ({len(tradeable_symbols)}):")
     if tradeable_symbols:
         for inst in tradeable_instruments:
-            window = inst.current_window
+            active_windows = inst.get_active_windows(current_time_uk)
             print(f"   ✓ {inst.symbol:8} ({inst.name})")
-            print(f"      Window: {window['name']}")
-            print(f"      Time:   {window['start'].strftime('%H:%M')} - {window['end'].strftime('%H:%M')} GMT")
-            print(f"      Strategy: {window['strategy_type']}")
 
-            # Calculate time remaining
-            window_end = current_time_uk.replace(
-                hour=window['end'].hour,
-                minute=window['end'].minute,
-                second=0,
-                microsecond=0
-            )
-            time_remaining = window_end - current_time_uk
-            hours, remainder = divmod(time_remaining.seconds, 3600)
-            minutes, _ = divmod(remainder, 60)
-            print(f"      Remaining: {hours}h {minutes}m")
-            print()
+            for window in active_windows:
+                print(f"      Window: {window.name}")
+                print(f"      Time:   {window.start.strftime('%H:%M')} - {window.end.strftime('%H:%M')} GMT")
+                print(f"      Strategy: {window.strategy_type}")
+
+                # Calculate time remaining
+                time_remaining = window.time_until_close(current_time_uk)
+                if time_remaining:
+                    hours, remainder = divmod(int(time_remaining.total_seconds()), 3600)
+                    minutes, _ = divmod(remainder, 60)
+                    print(f"      Remaining: {hours}h {minutes}m")
+                print()
     else:
         print("   ⚠️  No instruments in trading window at this time")
 

@@ -23,6 +23,15 @@ INSTRUMENTS = {
         'name': 'USD/JPY',
         'symbol': 'USDJPY',
         'enabled': True,
+        # Recovery settings tailored for USDJPY volatility (~100-150 pip daily range)
+        'recovery': {
+            'grid_spacing_pips': 15,      # Grid every 15 pips (not too tight)
+            'dca_trigger_pips': 35,       # DCA after 35 pips underwater
+            'hedge_trigger_pips': 50,     # Hedge after 50 pips
+            'dca_multiplier': 1.5,        # 1.5x scaling (less aggressive)
+            'max_grid_levels': 4,
+            'max_dca_levels': 3,
+        },
         'windows': [
             {
                 'name': 'Tokyo-London Transition',
@@ -30,8 +39,7 @@ INSTRUMENTS = {
                 'end': time(9, 0),     # 9:00 AM GMT
                 'strategy_type': 'reversal',
                 'description': 'Tokyo-London transition/reversal strategy',
-                'close_negatives_at_end': True,
-                'use_mean_reversion_for_positives': True,
+                'close_all_at_end': True,          # Close ALL trades at window end
                 'min_confluence_score': 7,
             },
             {
@@ -40,8 +48,7 @@ INSTRUMENTS = {
                 'end': time(16, 0),     # 4:00 PM GMT
                 'strategy_type': 'correction',
                 'description': 'Correction after initial NY volatility',
-                'close_negatives_at_end': True,
-                'use_mean_reversion_for_positives': True,
+                'close_all_at_end': True,          # Close ALL trades at window end
                 'min_confluence_score': 7,
             }
         ]
@@ -52,6 +59,15 @@ INSTRUMENTS = {
         'name': 'FTSE 100',
         'symbol': 'UK100',
         'enabled': True,
+        # Recovery settings for UK100 (~100-200 point daily range)
+        'recovery': {
+            'grid_spacing_pips': 35,      # Grid every 35 points
+            'dca_trigger_pips': 70,       # DCA after 70 points
+            'hedge_trigger_pips': 90,     # Hedge after 90 points
+            'dca_multiplier': 1.5,
+            'max_grid_levels': 4,
+            'max_dca_levels': 3,
+        },
         'windows': [
             {
                 'name': 'Morning Correction',
@@ -59,8 +75,7 @@ INSTRUMENTS = {
                 'end': time(11, 0),     # 11:00 AM GMT
                 'strategy_type': 'correction',
                 'description': 'The morning correction after market open',
-                'close_negatives_at_end': True,
-                'use_mean_reversion_for_positives': True,
+                'close_all_at_end': True,          # Close ALL trades at window end
                 'min_confluence_score': 8,
             }
         ]
@@ -71,6 +86,15 @@ INSTRUMENTS = {
         'name': 'DAX',
         'symbol': 'GER30',
         'enabled': True,
+        # Recovery settings for GER30 (~200-400 point daily range - VERY volatile)
+        'recovery': {
+            'grid_spacing_pips': 45,      # Grid every 45 points (wider for high volatility)
+            'dca_trigger_pips': 90,       # DCA after 90 points
+            'hedge_trigger_pips': 120,    # Hedge after 120 points
+            'dca_multiplier': 1.5,
+            'max_grid_levels': 4,
+            'max_dca_levels': 3,
+        },
         'windows': [
             {
                 'name': 'Morning Correction',
@@ -78,8 +102,7 @@ INSTRUMENTS = {
                 'end': time(11, 0),     # 11:00 AM GMT
                 'strategy_type': 'correction',
                 'description': 'The morning correction after market open',
-                'close_negatives_at_end': True,
-                'use_mean_reversion_for_positives': True,
+                'close_all_at_end': True,          # Close ALL trades at window end
                 'min_confluence_score': 8,
             }
         ]
@@ -90,6 +113,15 @@ INSTRUMENTS = {
         'name': 'EUR/USD',
         'symbol': 'EURUSD',
         'enabled': True,
+        # Recovery settings for EURUSD (~60-80 pip daily range)
+        'recovery': {
+            'grid_spacing_pips': 12,      # Grid every 12 pips
+            'dca_trigger_pips': 30,       # DCA after 30 pips
+            'hedge_trigger_pips': 45,     # Hedge after 45 pips
+            'dca_multiplier': 1.5,
+            'max_grid_levels': 4,
+            'max_dca_levels': 3,
+        },
         'windows': [
             {
                 'name': 'Post-London Open',
@@ -97,8 +129,7 @@ INSTRUMENTS = {
                 'end': time(11, 30),    # 11:30 AM GMT
                 'strategy_type': 'settling',
                 'description': 'Post-London open "settling" period',
-                'close_negatives_at_end': True,
-                'use_mean_reversion_for_positives': True,
+                'close_all_at_end': True,          # Close ALL trades at window end
                 'min_confluence_score': 7,
             }
         ]
@@ -109,6 +140,15 @@ INSTRUMENTS = {
         'name': 'GBP/USD',
         'symbol': 'GBPUSD',
         'enabled': True,
+        # Recovery settings for GBPUSD (~100-120 pip daily range - more volatile than EURUSD)
+        'recovery': {
+            'grid_spacing_pips': 18,      # Grid every 18 pips (wider than EURUSD)
+            'dca_trigger_pips': 40,       # DCA after 40 pips
+            'hedge_trigger_pips': 55,     # Hedge after 55 pips
+            'dca_multiplier': 1.5,
+            'max_grid_levels': 4,
+            'max_dca_levels': 3,
+        },
         'windows': [
             {
                 'name': 'Post-London Open',
@@ -116,8 +156,7 @@ INSTRUMENTS = {
                 'end': time(11, 30),    # 11:30 AM GMT
                 'strategy_type': 'settling',
                 'description': 'Post-London open "settling" period',
-                'close_negatives_at_end': True,
-                'use_mean_reversion_for_positives': True,
+                'close_all_at_end': True,          # Close ALL trades at window end
                 'min_confluence_score': 7,
             }
         ]
@@ -128,6 +167,15 @@ INSTRUMENTS = {
         'name': 'S&P 500',
         'symbol': 'US500',
         'enabled': True,
+        # Recovery settings for US500 (~50-100 point daily range)
+        'recovery': {
+            'grid_spacing_pips': 25,      # Grid every 25 points
+            'dca_trigger_pips': 50,       # DCA after 50 points
+            'hedge_trigger_pips': 70,     # Hedge after 70 points
+            'dca_multiplier': 1.5,
+            'max_grid_levels': 4,
+            'max_dca_levels': 3,
+        },
         'windows': [
             {
                 'name': 'Afternoon Fade',
@@ -135,8 +183,7 @@ INSTRUMENTS = {
                 'end': time(16, 30),    # 4:30 PM GMT
                 'strategy_type': 'fade',
                 'description': 'The afternoon "fade" strategy',
-                'close_negatives_at_end': True,
-                'use_mean_reversion_for_positives': True,
+                'close_all_at_end': True,          # Close ALL trades at window end
                 'min_confluence_score': 8,
             }
         ]
@@ -147,6 +194,15 @@ INSTRUMENTS = {
         'name': 'NASDAQ',
         'symbol': 'NDAQ',
         'enabled': True,
+        # Recovery settings for NDAQ (~300-600 point daily range - EXTREMELY volatile!)
+        'recovery': {
+            'grid_spacing_pips': 60,      # Grid every 60 points (widest spacing for high volatility)
+            'dca_trigger_pips': 120,      # DCA after 120 points
+            'hedge_trigger_pips': 150,    # Hedge after 150 points
+            'dca_multiplier': 1.5,
+            'max_grid_levels': 4,
+            'max_dca_levels': 3,
+        },
         'windows': [
             {
                 'name': 'Afternoon Fade',
@@ -154,8 +210,7 @@ INSTRUMENTS = {
                 'end': time(16, 30),    # 4:30 PM GMT
                 'strategy_type': 'fade',
                 'description': 'The afternoon "fade" strategy',
-                'close_negatives_at_end': True,
-                'use_mean_reversion_for_positives': True,
+                'close_all_at_end': True,          # Close ALL trades at window end
                 'min_confluence_score': 8,
             }
         ]
@@ -213,6 +268,28 @@ def is_instrument_enabled(symbol: str) -> bool:
         True if enabled, False otherwise
     """
     return INSTRUMENTS.get(symbol, {}).get('enabled', False)
+
+
+def get_recovery_settings(symbol: str) -> Dict[str, Any]:
+    """
+    Get recovery settings for a specific instrument.
+
+    Args:
+        symbol: Instrument symbol
+
+    Returns:
+        Dictionary with recovery settings (grid_spacing_pips, dca_trigger_pips, etc.)
+
+    Raises:
+        KeyError: If instrument not found or has no recovery settings
+    """
+    if symbol not in INSTRUMENTS:
+        raise KeyError(f"Instrument '{symbol}' not found in configuration")
+
+    if 'recovery' not in INSTRUMENTS[symbol]:
+        raise KeyError(f"Instrument '{symbol}' has no recovery settings configured")
+
+    return INSTRUMENTS[symbol]['recovery']
 
 
 def get_instruments_by_strategy_type(strategy_type: str) -> List[str]:

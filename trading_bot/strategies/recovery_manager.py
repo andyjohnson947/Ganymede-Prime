@@ -8,19 +8,20 @@ from typing import Dict, List, Optional
 from datetime import datetime
 
 from utils.timezone_manager import get_current_time
+from portfolio.instruments_config import get_recovery_settings
 from config.strategy_config import (
     GRID_ENABLED,
-    GRID_SPACING_PIPS,
-    MAX_GRID_LEVELS,
+    GRID_SPACING_PIPS,      # Fallback default
+    MAX_GRID_LEVELS,        # Fallback default
     GRID_LOT_SIZE,
     HEDGE_ENABLED,
-    HEDGE_TRIGGER_PIPS,
+    HEDGE_TRIGGER_PIPS,     # Fallback default
     HEDGE_RATIO,
     MAX_HEDGES_PER_POSITION,
     DCA_ENABLED,
-    DCA_TRIGGER_PIPS,
-    DCA_MAX_LEVELS,
-    DCA_MULTIPLIER,
+    DCA_TRIGGER_PIPS,       # Fallback default
+    DCA_MAX_LEVELS,         # Fallback default
+    DCA_MULTIPLIER,         # Fallback default
 )
 
 
@@ -53,6 +54,31 @@ class RecoveryManager:
     def __init__(self):
         """Initialize recovery manager"""
         self.tracked_positions = {}  # Track positions and their recovery state
+
+    def _get_recovery_settings(self, symbol: str) -> Dict:
+        """
+        Get recovery settings for a symbol with fallback to defaults.
+
+        Args:
+            symbol: Trading symbol
+
+        Returns:
+            Dictionary with recovery settings
+        """
+        try:
+            # Try to get instrument-specific settings
+            settings = get_recovery_settings(symbol)
+            return settings
+        except (KeyError, Exception):
+            # Fallback to global defaults from strategy_config
+            return {
+                'grid_spacing_pips': GRID_SPACING_PIPS,
+                'dca_trigger_pips': DCA_TRIGGER_PIPS,
+                'hedge_trigger_pips': HEDGE_TRIGGER_PIPS,
+                'dca_multiplier': DCA_MULTIPLIER,
+                'max_grid_levels': MAX_GRID_LEVELS,
+                'max_dca_levels': DCA_MAX_LEVELS,
+            }
 
     def track_position(
         self,
@@ -139,9 +165,15 @@ class RecoveryManager:
             return None
 
         position = self.tracked_positions[ticket]
+        symbol = position['symbol']
+
+        # Get instrument-specific recovery settings
+        recovery_settings = self._get_recovery_settings(symbol)
+        grid_spacing = recovery_settings['grid_spacing_pips']
+        max_grid_levels = recovery_settings['max_grid_levels']
 
         # Check if maxed out grid levels
-        if len(position['grid_levels']) >= MAX_GRID_LEVELS:
+        if len(position['grid_levels']) >= max_grid_levels:
             return None
 
         entry_price = position['entry_price']
@@ -158,13 +190,13 @@ class RecoveryManager:
             return None
 
         # Calculate expected grid levels
-        expected_levels = int(pips_moved / GRID_SPACING_PIPS) + 1
+        expected_levels = int(pips_moved / grid_spacing) + 1
 
         # Need to add grid level?
         if expected_levels > len(position['grid_levels']) + 1:  # +1 for original position
             # Calculate grid price
             levels_added = len(position['grid_levels']) + 1
-            grid_distance = GRID_SPACING_PIPS * levels_added * pip_value
+            grid_distance = grid_spacing * levels_added * pip_value
 
             if position_type == 'buy':
                 grid_price = entry_price - grid_distance
@@ -186,7 +218,7 @@ class RecoveryManager:
 
             print(f"🔹 Grid Level {len(position['grid_levels'])} triggered for {ticket}")
             print(f"   Entry: {entry_price:.5f} → Grid: {grid_price:.5f}")
-            print(f"   Distance: {GRID_SPACING_PIPS * levels_added:.1f} pips")
+            print(f"   Distance: {grid_spacing * levels_added:.1f} pips")
 
             return {
                 'action': 'grid',
@@ -221,6 +253,11 @@ class RecoveryManager:
             return None
 
         position = self.tracked_positions[ticket]
+        symbol = position['symbol']
+
+        # Get instrument-specific recovery settings
+        recovery_settings = self._get_recovery_settings(symbol)
+        hedge_trigger = recovery_settings['hedge_trigger_pips']
 
         # Check if already hedged
         if len(position['hedge_tickets']) >= MAX_HEDGES_PER_POSITION:
@@ -240,7 +277,7 @@ class RecoveryManager:
             position['max_underwater_pips'] = pips_underwater
 
         # Check if trigger reached
-        if pips_underwater >= HEDGE_TRIGGER_PIPS:
+        if pips_underwater >= hedge_trigger:
             # Calculate hedge volume (overhedge) - based on INITIAL volume, not total
             # Original EA hedges the initial position size, not accumulated grid/DCA
             hedge_volume = position['initial_volume'] * HEDGE_RATIO
@@ -298,9 +335,16 @@ class RecoveryManager:
             return None
 
         position = self.tracked_positions[ticket]
+        symbol = position['symbol']
+
+        # Get instrument-specific recovery settings
+        recovery_settings = self._get_recovery_settings(symbol)
+        dca_trigger = recovery_settings['dca_trigger_pips']
+        dca_multiplier = recovery_settings['dca_multiplier']
+        max_dca_levels = recovery_settings['max_dca_levels']
 
         # Check if maxed out DCA levels
-        if DCA_MAX_LEVELS and len(position['dca_levels']) >= DCA_MAX_LEVELS:
+        if max_dca_levels and len(position['dca_levels']) >= max_dca_levels:
             return None
 
         entry_price = position['entry_price']
@@ -313,20 +357,20 @@ class RecoveryManager:
             pips_moved = (current_price - entry_price) / pip_value
 
         # Check if underwater enough
-        if pips_moved < DCA_TRIGGER_PIPS:
+        if pips_moved < dca_trigger:
             return None
 
         # Calculate expected DCA levels
-        expected_levels = int(pips_moved / DCA_TRIGGER_PIPS)
+        expected_levels = int(pips_moved / dca_trigger)
 
         # Need to add DCA level?
         if expected_levels > len(position['dca_levels']):
             # Calculate DCA volume (increase by multiplier)
             if len(position['dca_levels']) == 0:
-                dca_volume = position['initial_volume'] * DCA_MULTIPLIER
+                dca_volume = position['initial_volume'] * dca_multiplier
             else:
                 last_dca = position['dca_levels'][-1]
-                dca_volume = last_dca['volume'] * DCA_MULTIPLIER
+                dca_volume = last_dca['volume'] * dca_multiplier
 
             # Round to broker step size (0.01)
             dca_volume = round_volume_to_step(dca_volume)
@@ -344,7 +388,7 @@ class RecoveryManager:
 
             print(f"📊 DCA Level {len(position['dca_levels'])} triggered for {ticket}")
             print(f"   Price: {current_price:.5f}")
-            print(f"   Volume: {dca_volume:.2f} (multiplier: {DCA_MULTIPLIER}x)")
+            print(f"   Volume: {dca_volume:.2f} (multiplier: {dca_multiplier}x)")
             print(f"   Total volume now: {position['total_volume']:.2f}")
 
             return {

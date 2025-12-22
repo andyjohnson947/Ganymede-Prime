@@ -32,8 +32,7 @@ class TradingWindow:
     end: time
     strategy_type: str
     description: str
-    close_negatives_at_end: bool = True
-    use_mean_reversion_for_positives: bool = True
+    close_all_at_end: bool = True          # Close ALL positions at window end
     min_confluence_score: int = 7
 
     def get_status(self, current_time: datetime) -> WindowStatus:
@@ -157,18 +156,18 @@ class TradingInstrument:
 
         return [w for w in self.trading_windows if w.is_closing_soon(current_time)]
 
-    def should_close_negatives(self, current_time: datetime) -> bool:
+    def should_close_all_positions(self, current_time: datetime) -> bool:
         """
-        Check if negative positions should be closed now.
+        Check if all positions should be closed now (window ending).
 
         Args:
             current_time: Current time (timezone-aware)
 
         Returns:
-            True if any window is closing soon and requires negative closure
+            True if any window is closing soon and requires position closure
         """
         closing_windows = self.get_closing_windows(current_time)
-        return any(w.close_negatives_at_end for w in closing_windows)
+        return any(w.close_all_at_end for w in closing_windows)
 
     def get_min_confluence_score(self, current_time: datetime) -> int:
         """
@@ -233,8 +232,7 @@ class PortfolioManager:
                     end=window_config['end'],
                     strategy_type=window_config.get('strategy_type', 'unknown'),
                     description=window_config.get('description', ''),
-                    close_negatives_at_end=window_config.get('close_negatives_at_end', True),
-                    use_mean_reversion_for_positives=window_config.get('use_mean_reversion_for_positives', True),
+                    close_all_at_end=window_config.get('close_all_at_end', True),
                     min_confluence_score=window_config.get('min_confluence_score', 7)
                 )
                 windows.append(window)
@@ -339,11 +337,11 @@ class PortfolioManager:
             closing_windows = instrument.get_closing_windows(current_time)
 
             for window in closing_windows:
-                if window.close_negatives_at_end:
+                if window.close_all_at_end:
                     action = CloseAction(
                         symbol=instrument.symbol,
                         reason=f"Window closing: {window.name}",
-                        close_negatives_only=True,
+                        close_negatives_only=False,  # Close ALL positions (not just negatives)
                         window_name=window.name
                     )
                     close_actions.append(action)
@@ -397,7 +395,7 @@ class PortfolioManager:
             'tradeable_now': instrument.is_tradeable_now(current_time),
             'active_windows': len(active_windows),
             'closing_windows': len(closing_windows),
-            'should_close_negatives': instrument.should_close_negatives(current_time),
+            'should_close_all_positions': instrument.should_close_all_positions(current_time),
             'min_confluence_score': instrument.get_min_confluence_score(current_time),
             'windows': window_statuses
         }
@@ -462,7 +460,7 @@ if __name__ == "__main__":
         print(f"\n{status['name']} ({symbol}):")
         print(f"  Tradeable: {status['tradeable_now']}")
         print(f"  Active Windows: {status['active_windows']}")
-        print(f"  Should Close Negatives: {status['should_close_negatives']}")
+        print(f"  Should Close All Positions: {status['should_close_all_positions']}")
         print(f"  Min Confluence Score: {status['min_confluence_score']}")
 
         for window in status['windows']:

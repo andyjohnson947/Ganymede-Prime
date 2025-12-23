@@ -5,7 +5,9 @@ Defines all tradeable instruments and their specific trading windows.
 All times are in GMT (will be automatically adjusted for GMT+1/BST).
 
 Trading Windows per Instrument:
-- EUR/USD & GBP/USD: 10:00 AM – 11:30 AM (Post-London open settling)
+- EUR/USD & GBP/USD: Multiple optimal windows based on historical analysis
+  - Mean Reversion: 05:00-13:00 (covers hours 5,6,7,9,12)
+  - Breakout: 03:00-17:00 (covers hours 3,14,15,16)
 """
 
 from datetime import time
@@ -39,13 +41,13 @@ INSTRUMENTS = {
         },
         'windows': [
             {
-                'name': 'Post-London Open',
-                'start': time(10, 0),   # 10:00 AM GMT
-                'end': time(11, 30),    # 11:30 AM GMT
-                'strategy_type': 'settling',
-                'description': 'Post-London open "settling" period',
-                'close_all_at_end': True,          # Close ALL trades at window end
-                'min_confluence_score': 7,
+                'name': 'All-Day Trading Window',
+                'start': time(0, 0),     # 00:00 GMT (midnight)
+                'end': time(23, 59),     # 23:59 GMT (end of day)
+                'strategy_type': 'mixed',
+                'description': 'Combined mean reversion and breakout strategies with time filters',
+                'close_all_at_end': False,  # Don't force close - let strategies manage
+                'min_confluence_score': 4,
             }
         ]
     },
@@ -75,13 +77,13 @@ INSTRUMENTS = {
         },
         'windows': [
             {
-                'name': 'Post-London Open',
-                'start': time(10, 0),   # 10:00 AM GMT
-                'end': time(11, 30),    # 11:30 AM GMT
-                'strategy_type': 'settling',
-                'description': 'Post-London open "settling" period',
-                'close_all_at_end': True,          # Close ALL trades at window end
-                'min_confluence_score': 7,
+                'name': 'All-Day Trading Window',
+                'start': time(0, 0),     # 00:00 GMT (midnight)
+                'end': time(23, 59),     # 23:59 GMT (end of day)
+                'strategy_type': 'mixed',
+                'description': 'Combined mean reversion and breakout strategies with time filters',
+                'close_all_at_end': False,  # Don't force close - let strategies manage
+                'min_confluence_score': 4,
             }
         ]
     },

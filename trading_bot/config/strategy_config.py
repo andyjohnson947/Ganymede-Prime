@@ -169,6 +169,74 @@ TRADE_SESSIONS = {
 TRADE_DAYS = [0, 1, 2, 3, 4]  # Monday-Friday
 
 # =============================================================================
+# TIME FILTERS - STRATEGY-SPECIFIC TRADING WINDOWS
+# =============================================================================
+
+# Enable time filtering (False = trade all hours)
+ENABLE_TIME_FILTERS = True
+
+# MEAN REVERSION TRADING HOURS (UTC)
+# Based on analysis: Best win rates (79.3% at Value Area, 73.5% at VWAP ±2σ)
+# Hours with highest success: 05:00 (100%), 12:00 (100%), 07:00 (93%), 06:00 (86%), 09:00 (80%)
+MEAN_REVERSION_HOURS = [5, 6, 7, 9, 12]
+
+# MEAN REVERSION TRADING DAYS (0=Monday, 6=Sunday)
+# Best days: Tuesday (73%), Wednesday (70%), Thursday (69%)
+# Monday included per user request
+MEAN_REVERSION_DAYS = [0, 1, 2, 3]  # Mon, Tue, Wed, Thu
+
+# MEAN REVERSION SESSIONS
+# Tokyo: 74% win rate, London early: 68% win rate
+# Avoid New York: 53% win rate
+MEAN_REVERSION_SESSIONS = ['tokyo', 'london']
+
+# BREAKOUT TRADING HOURS (UTC)
+# Based on analysis: High volatility periods
+# Hours: 03:00 (70% win, high ATR), 14:00 (London/NY overlap)
+BREAKOUT_HOURS = [3, 14, 15, 16]  # 03:00 and 14:00-16:00 (London/NY overlap)
+
+# BREAKOUT TRADING DAYS
+# Best days: Tuesday (62% win, high volatility), Friday (trend exhaustion)
+# Monday (week open breakouts)
+BREAKOUT_DAYS = [0, 1, 4]  # Mon, Tue, Fri
+
+# BREAKOUT SESSIONS
+# London/NY overlap = highest volatility for breakouts
+# Tokyo included for 03:00 breakout hour (70% win rate in analysis)
+BREAKOUT_SESSIONS = ['tokyo', 'london', 'new_york']
+
+# =============================================================================
+# BREAKOUT STRATEGY PARAMETERS
+# =============================================================================
+
+# Enable breakout strategy (in addition to mean reversion)
+BREAKOUT_ENABLED = True
+
+# Breakout detection parameters
+BREAKOUT_LOOKBACK = 20  # Bars to identify range high/low
+BREAKOUT_VOLUME_MULTIPLIER = 1.5  # Volume must be 1.5x average
+BREAKOUT_ATR_MULTIPLIER = 1.2  # ATR must be 1.2x median (high volatility)
+
+# Breakout entry conditions
+BREAKOUT_MIN_RANGE_PIPS = 20  # Minimum range size to consider for breakout
+BREAKOUT_CLOSE_BEYOND_LEVEL = True  # Candle must close beyond level (not just wick)
+
+# Breakout momentum filters
+BREAKOUT_RSI_BUY_THRESHOLD = 60  # RSI > 60 for bullish breakouts
+BREAKOUT_RSI_SELL_THRESHOLD = 40  # RSI < 40 for bearish breakouts
+
+# Breakout position sizing (more conservative due to lower win rate)
+BREAKOUT_LOT_SIZE_MULTIPLIER = 0.5  # Use 50% of normal lot size
+
+# Breakout profit targets
+BREAKOUT_TARGET_METHOD = 'range_projection'  # 'range_projection', 'atr_multiple', 'lvn'
+BREAKOUT_TARGET_MULTIPLIER = 1.0  # 1x range for 'range_projection'
+BREAKOUT_ATR_TARGET_MULTIPLE = 2.0  # 2x ATR for 'atr_multiple'
+
+# Breakout stop loss (tight stops - breakouts should not reverse)
+BREAKOUT_STOP_PERCENT = 0.2  # 20% of range back from breakout level
+
+# =============================================================================
 # POSITION MANAGEMENT
 # =============================================================================
 

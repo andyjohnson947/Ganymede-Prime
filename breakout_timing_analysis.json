@@ -1,0 +1,102 @@
+{
+  "total_trades": 413,
+  "breakout_trades": 14,
+  "best_breakout_hours": [
+    3,
+    14
+  ],
+  "best_breakout_sessions": [
+    "London",
+    "New York"
+  ],
+  "best_breakout_days": [
+    "Tuesday",
+    "Friday"
+  ],
+  "hourly_stats": {
+    "trades": {
+      "3": 10,
+      "14": 2
+    },
+    "total_profit": {
+      "3": 71.44,
+      "14": -15.58
+    },
+    "avg_profit": {
+      "3": 7.14,
+      "14": -7.79
+    },
+    "win_rate": {
+      "3": 70.0,
+      "14": 50.0
+    },
+    "avg_duration": {
+      "3": 2.43,
+      "14": 2.04
+    },
+    "avg_atr": {
+      "3": 0.0,
+      "14": 0.0
+    }
+  },
+  "session_stats": {
+    "trades": {
+      "London": 3,
+      "New York": 1,
+      "Tokyo": 10
+    },
+    "total_profit": {
+      "London": -19.18,
+      "New York": 76.16,
+      "Tokyo": 71.44
+    },
+    "avg_profit": {
+      "London": -6.39,
+      "New York": 76.16,
+      "Tokyo": 7.14
+    },
+    "win_rate": {
+      "London": 33.0,
+      "New York": 100.0,
+      "Tokyo": 70.0
+    },
+    "avg_duration": {
+      "London": 2.61,
+      "New York": 1.56,
+      "Tokyo": 2.43
+    },
+    "avg_atr": {
+      "London": 0.0,
+      "New York": 0.0,
+      "Tokyo": 0.0
+    }
+  },
+  "day_stats": {
+    "trades": {
+      "Tuesday": 13,
+      "Friday": 1
+    },
+    "total_profit": {
+      "Tuesday": 127.52,
+      "Friday": 0.9
+    },
+    "avg_profit": {
+      "Tuesday": 9.81,
+      "Friday": 0.9
+    },
+    "win_rate": {
+      "Tuesday": 62.0,
+      "Friday": 100.0
+    },
+    "avg_duration": {
+      "Tuesday": 2.85,
+      "Friday": 0.01
+    },
+    "avg_atr": {
+      "Tuesday": 0.0,
+      "Friday": 0.0
+    }
+  },
+  "avg_atr_breakout": 0.0015353061224489145,
+  "avg_atr_all": 0.001354674216027817
+}

@@ -5,7 +5,7 @@ Implements scale-out functionality for progressive profit taking
 
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
-from ..config import strategy_config as cfg
+from config import strategy_config as cfg
 
 
 class PartialCloseManager:

@@ -6,7 +6,7 @@ Handles automatic timezone conversion between broker time and GMT/UTC
 
 from datetime import datetime, time, timedelta
 from typing import Dict, Optional
-from ..config import strategy_config as cfg
+from config import strategy_config as cfg
 
 
 class TimeFilter:

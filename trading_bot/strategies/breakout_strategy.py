@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
-from ..config import strategy_config as cfg
+from config import strategy_config as cfg
 
 
 class BreakoutStrategy:

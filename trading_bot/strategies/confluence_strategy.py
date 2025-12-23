@@ -11,6 +11,9 @@ import time
 from core.mt5_manager import MT5Manager
 from strategies.signal_detector import SignalDetector
 from strategies.recovery_manager import RecoveryManager
+from strategies.time_filters import TimeFilter
+from strategies.breakout_strategy import BreakoutStrategy
+from strategies.partial_close_manager import PartialCloseManager
 from utils.risk_calculator import RiskCalculator
 from utils.config_reloader import reload_config, print_current_config
 from utils.timezone_manager import get_current_time
@@ -24,6 +27,8 @@ from config.strategy_config import (
     MAX_POSITIONS_PER_SYMBOL,
     PROFIT_TARGET_PERCENT,
     MAX_POSITION_HOURS,
+    PARTIAL_CLOSE_ENABLED,
+    BREAKOUT_ENABLED,
 )
 
 
@@ -42,6 +47,11 @@ class ConfluenceStrategy:
         self.recovery_manager = RecoveryManager()
         self.risk_calculator = RiskCalculator()
         self.portfolio_manager = PortfolioManager()
+
+        # New strategy modules
+        self.time_filter = TimeFilter()
+        self.breakout_strategy = BreakoutStrategy() if BREAKOUT_ENABLED else None
+        self.partial_close_manager = PartialCloseManager() if PARTIAL_CLOSE_ENABLED else None
 
         self.running = False
         self.last_data_refresh = {}
@@ -156,6 +166,15 @@ class ConfluenceStrategy:
         # Calculate VWAP on H1 data
         h1_data = self.signal_detector.vwap.calculate(h1_data)
 
+        # Calculate ATR for breakout detection
+        if 'atr' not in h1_data.columns:
+            # Simple ATR calculation (14 period)
+            high_low = h1_data['high'] - h1_data['low']
+            high_close = abs(h1_data['high'] - h1_data['close'].shift())
+            low_close = abs(h1_data['low'] - h1_data['close'].shift())
+            true_range = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+            h1_data['atr'] = true_range.rolling(window=14).mean()
+
         # Fetch HTF data
         d1_data = self.mt5.get_historical_data(symbol, 'D1', bars=100)
         w1_data = self.mt5.get_historical_data(symbol, 'W1', bars=50)
@@ -233,6 +252,49 @@ class ConfluenceStrategy:
                 for action in recovery_actions:
                     self._execute_recovery_action(action)
 
+                # Check partial close levels (if enabled and position is in profit)
+                if self.partial_close_manager and position['profit'] > 0:
+                    # Track position if not already tracked
+                    if ticket not in self.partial_close_manager.partial_closes:
+                        # Calculate TP price based on VWAP or other exit logic
+                        # For now, use a reasonable default TP
+                        entry_price = position['price_open']
+                        pos_type = 'buy' if position['type'] == 0 else 'sell'
+
+                        # Estimate TP price (40 pips for EURUSD, adjust as needed)
+                        pip_value = symbol_info.get('point', 0.0001)
+                        tp_distance = 40 * pip_value
+                        tp_price = entry_price + tp_distance if pos_type == 'buy' else entry_price - tp_distance
+
+                        self.partial_close_manager.track_position(
+                            ticket=ticket,
+                            entry_price=entry_price,
+                            volume=position['volume'],
+                            position_type=pos_type,
+                            tp_price=tp_price
+                        )
+
+                    # Calculate current profit in pips
+                    entry_price = position['price_open']
+                    current_price = position['price_current']
+                    pip_diff = abs(current_price - entry_price) / pip_value
+
+                    # Check for partial close triggers
+                    partial_action = self.partial_close_manager.check_partial_close_levels(
+                        ticket=ticket,
+                        current_price=current_price,
+                        current_profit_pips=pip_diff
+                    )
+
+                    if partial_action:
+                        # Execute partial close
+                        close_volume = partial_action['volume']
+                        print(f"📉 Partial close: {ticket} - {partial_action['percent']}% at {partial_action['level']}% to TP")
+
+                        # Close partial volume
+                        if self.mt5.close_partial_position(ticket, close_volume):
+                            print(f"✅ Partial close successful: {close_volume} lots")
+
                 # Check exit conditions (only for tracked original positions)
                 # Priority order: 1) Profit target, 2) Time limit, 3) VWAP reversion
 
@@ -280,13 +342,52 @@ class ConfluenceStrategy:
         d1_data = cache['d1']
         w1_data = cache['w1']
 
-        # Detect signal
-        signal = self.signal_detector.detect_signal(
-            current_data=h1_data,
-            daily_data=d1_data,
-            weekly_data=w1_data,
-            symbol=symbol
-        )
+        current_time = get_current_time()
+        signal = None
+
+        # Check which strategy can trade based on time filters
+        can_trade_mr = self.time_filter.can_trade_mean_reversion(current_time)
+        can_trade_bo = self.time_filter.can_trade_breakout(current_time)
+
+        # Try mean reversion signal first (if allowed)
+        if can_trade_mr:
+            signal = self.signal_detector.detect_signal(
+                current_data=h1_data,
+                daily_data=d1_data,
+                weekly_data=w1_data,
+                symbol=symbol
+            )
+            if signal:
+                signal['strategy_type'] = 'mean_reversion'
+
+        # Try breakout signal (if mean reversion found nothing and breakout is allowed)
+        if signal is None and can_trade_bo and self.breakout_strategy:
+            # Get current price and volume
+            latest_bar = h1_data.iloc[-1]
+            current_price = latest_bar['close']
+            current_volume = latest_bar['volume']
+
+            # Calculate ATR
+            atr = h1_data['atr'].iloc[-1] if 'atr' in h1_data.columns else 0
+
+            # Check for range breakout
+            breakout_signal = self.breakout_strategy.detect_range_breakout(
+                data=h1_data,
+                current_price=current_price,
+                current_volume=current_volume,
+                atr=atr
+            )
+
+            if breakout_signal:
+                # Convert breakout signal to standard signal format
+                signal = {
+                    'symbol': symbol,
+                    'direction': breakout_signal['direction'],
+                    'price': current_price,
+                    'strategy_type': 'breakout',
+                    'confluence_score': breakout_signal.get('score', 3),
+                    'factors': breakout_signal.get('factors', [])
+                }
 
         if signal is None:
             return
@@ -295,6 +396,7 @@ class ConfluenceStrategy:
         self.stats['signals_detected'] += 1
 
         print()
+        print(f"🎯 Signal: {signal.get('strategy_type', 'unknown').upper()}")
         print(self.signal_detector.get_signal_summary(signal))
         print()
 

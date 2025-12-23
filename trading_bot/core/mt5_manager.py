@@ -363,6 +363,94 @@ class MT5Manager:
         print(f"✅ Position closed: {ticket}")
         return True
 
+    def close_partial_position(self, ticket: int, partial_volume: float) -> bool:
+        """
+        Close partial volume of an open position
+
+        Args:
+            ticket: Position ticket number
+            partial_volume: Volume to close (must be less than position volume)
+
+        Returns:
+            bool: True if closed successfully
+        """
+        if not self.connected:
+            print("❌ Not connected to MT5")
+            return False
+
+        # Get position info
+        position = mt5.positions_get(ticket=ticket)
+        if not position:
+            print(f"❌ Position {ticket} not found")
+            return False
+
+        position = position[0]
+
+        # Validate partial volume
+        if partial_volume >= position.volume:
+            print(f"❌ Partial volume {partial_volume} must be less than position volume {position.volume}")
+            return False
+
+        if partial_volume <= 0:
+            print(f"❌ Partial volume must be greater than 0")
+            return False
+
+        # Prepare close request
+        symbol = position.symbol
+
+        # Get symbol info to determine filling mode and validate volume
+        symbol_info = mt5.symbol_info(symbol)
+        if symbol_info is None:
+            print(f"❌ Symbol {symbol} not found")
+            return False
+
+        # Round volume to broker step
+        volume_step = symbol_info.volume_step
+        partial_volume = round(partial_volume / volume_step) * volume_step
+
+        # Check minimum volume
+        if partial_volume < symbol_info.volume_min:
+            print(f"❌ Partial volume {partial_volume} below minimum {symbol_info.volume_min}")
+            return False
+
+        # Determine supported filling mode
+        filling_type = self._get_filling_mode(symbol_info)
+
+        # Opposite order type
+        if position.type == mt5.ORDER_TYPE_BUY:
+            order_type = mt5.ORDER_TYPE_SELL
+            price = mt5.symbol_info_tick(symbol).bid
+        else:
+            order_type = mt5.ORDER_TYPE_BUY
+            price = mt5.symbol_info_tick(symbol).ask
+
+        request = {
+            "action": mt5.TRADE_ACTION_DEAL,
+            "symbol": symbol,
+            "volume": partial_volume,
+            "type": order_type,
+            "position": ticket,
+            "price": price,
+            "deviation": 20,
+            "magic": self.magic_number,
+            "comment": f"Partial close {partial_volume}",
+            "type_time": mt5.ORDER_TIME_GTC,
+            "type_filling": filling_type,
+        }
+
+        result = mt5.order_send(request)
+
+        if result is None:
+            print(f"❌ Partial close order failed: {mt5.last_error()}")
+            return False
+
+        if result.retcode != mt5.TRADE_RETCODE_DONE:
+            print(f"❌ Partial close failed: {result.comment}")
+            return False
+
+        print(f"✅ Partial close successful: {ticket} - {partial_volume} lots")
+        return True
+
     def modify_position(
         self,
         ticket: int,

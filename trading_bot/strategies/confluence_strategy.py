@@ -29,6 +29,7 @@ from config.strategy_config import (
     MAX_POSITION_HOURS,
     PARTIAL_CLOSE_ENABLED,
     BREAKOUT_ENABLED,
+    BREAKOUT_LOT_SIZE_MULTIPLIER,
 )
 
 
@@ -427,6 +428,16 @@ class ConfluenceStrategy:
             account_balance=account_info['balance'],
             symbol_info=symbol_info
         )
+
+        # Apply breakout multiplier if this is a breakout signal
+        if signal.get('strategy_type') == 'breakout':
+            volume = volume * BREAKOUT_LOT_SIZE_MULTIPLIER
+            # Round to broker's volume step
+            volume_step = symbol_info.get('volume_step', 0.01)
+            volume = round(volume / volume_step) * volume_step
+            # Ensure minimum volume
+            volume = max(symbol_info.get('volume_min', 0.01), volume)
+            print(f"📉 Breakout signal: Reducing lot size to {volume} (50% of base)")
 
         # Get current positions for validation
         positions = self.mt5.get_positions()

@@ -455,7 +455,7 @@ if __name__ == "__main__":
 
     # Check individual instruments
     print(f"\nInstrument Details:")
-    for symbol in ['USDJPY', 'GBPUSD', 'UK100']:
+    for symbol in ['EURUSD', 'GBPUSD']:
         status = portfolio.get_instrument_status(symbol)
         print(f"\n{status['name']} ({symbol}):")
         print(f"  Tradeable: {status['tradeable_now']}")

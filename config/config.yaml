@@ -5,7 +5,6 @@ trading:
   symbols:
     - EURUSD
     - GBPUSD
-    - USDJPY
   timeframes:
     - M15  # 15 minutes
     - H1   # 1 hour

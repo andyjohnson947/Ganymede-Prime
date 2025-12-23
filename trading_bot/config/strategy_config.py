@@ -133,7 +133,7 @@ DCA_MULTIPLIER = 2.0  # AGGRESSIVE: 2x martingale scaling (was 1.5x) - doubles e
 # =============================================================================
 
 # Base lot size for initial positions
-BASE_LOT_SIZE = 0.04  # Updated to 0.04 (was 0.03)
+BASE_LOT_SIZE = 0.04  # Updated to 0.04 with partial close strategy
 
 # Risk per trade (if using dynamic position sizing)
 RISK_PERCENT = 1.0
@@ -273,7 +273,7 @@ MAX_OPEN_POSITIONS = 3  # Reduced from 10 for safety
 MAX_POSITIONS_PER_SYMBOL = 1  # Only 1 position per symbol at a time
 
 # =============================================================================
-# EXIT MANAGEMENT (Net Profit Target + Time Limit)
+# EXIT MANAGEMENT (Net Profit Target + Time Limit + Partial Close)
 # =============================================================================
 
 # Net profit target for recovery stacks
@@ -283,6 +283,32 @@ PROFIT_TARGET_PERCENT = 0.5  # AGGRESSIVE: 0.5% target (easier to hit with large
 # Time-based exit for stuck positions
 # Auto-close recovery stack after this many hours if still open
 MAX_POSITION_HOURS = 12  # AGGRESSIVE: 12 hours max (was 4) - gives recovery time to work
+
+# =============================================================================
+# PARTIAL CLOSE (SCALE OUT) SETTINGS
+# =============================================================================
+
+# Enable partial close functionality
+PARTIAL_CLOSE_ENABLED = True
+
+# Partial close levels (percentage of position to close at each milestone)
+# Closes portions of the position as it moves toward TP
+PARTIAL_CLOSE_LEVELS = [
+    {'percent_to_tp': 50, 'close_percent': 50},  # Close 50% at halfway to TP
+    {'percent_to_tp': 75, 'close_percent': 50},  # Close 50% of remaining (25% total) at 75% to TP
+    # Final 25% closes at 100% TP or VWAP reversion
+]
+
+# Minimum profit required to enable partial close (in pips)
+# Prevents partial close on small moves
+PARTIAL_CLOSE_MIN_PROFIT_PIPS = 10
+
+# Apply partial close to recovery stacks (grid/hedge/DCA)
+PARTIAL_CLOSE_RECOVERY = False  # Only apply to original positions
+
+# Trail stop on remaining position after first partial close
+TRAIL_STOP_AFTER_PARTIAL = True
+TRAIL_STOP_DISTANCE_PIPS = 15  # Trail stop 15 pips behind price
 
 # =============================================================================
 # DATA MANAGEMENT

@@ -175,7 +175,33 @@ TRADE_DAYS = [0, 1, 2, 3, 4]  # Monday-Friday
 # Enable time filtering (False = trade all hours)
 ENABLE_TIME_FILTERS = True
 
-# MEAN REVERSION TRADING HOURS (UTC)
+# =============================================================================
+# BROKER TIMEZONE CONFIGURATION
+# =============================================================================
+
+# MT5 brokers use different server timezones. Set your broker's GMT offset here.
+# This is CRITICAL for time filters to work correctly!
+#
+# Common broker timezones:
+#   0  = GMT/UTC (rare, used by some brokers)
+#   +2 = GMT+2 (EET - most European brokers in winter)
+#   +3 = GMT+3 (EET summer / some brokers use this year-round)
+#   -4 = GMT-4 (EDT - some US brokers in summer)
+#   -5 = GMT-5 (EST - some US brokers in winter)
+#
+# HOW TO FIND YOUR BROKER'S OFFSET:
+# 1. Check current GMT time: https://time.is/GMT
+# 2. Check your MT5 terminal time (bottom right corner)
+# 3. Calculate: MT5 time - GMT time = your offset
+#    Example: MT5 shows 14:00, GMT is 12:00 → offset is +2
+#
+# IMPORTANT: All trading hours in this config are in GMT/UTC.
+# The bot will automatically convert broker time to GMT using this offset.
+BROKER_GMT_OFFSET = 0  # SET THIS TO YOUR BROKER'S OFFSET!
+
+# =============================================================================
+
+# MEAN REVERSION TRADING HOURS (GMT/UTC)
 # Based on analysis: Best win rates (79.3% at Value Area, 73.5% at VWAP ±2σ)
 # Hours with highest success: 05:00 (100%), 12:00 (100%), 07:00 (93%), 06:00 (86%), 09:00 (80%)
 MEAN_REVERSION_HOURS = [5, 6, 7, 9, 12]

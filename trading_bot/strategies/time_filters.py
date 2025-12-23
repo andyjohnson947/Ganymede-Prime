@@ -1,9 +1,10 @@
 """
 Time Filter Module
 Manages trading time windows for mean reversion and breakout strategies
+Handles automatic timezone conversion between broker time and GMT/UTC
 """
 
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from typing import Dict, Optional
 from ..config import strategy_config as cfg
 
@@ -12,10 +13,19 @@ class TimeFilter:
     """
     Time-based trading window filter
     Determines which strategy (if any) can trade at current time
+    Automatically converts broker time to GMT/UTC for filtering
     """
 
-    def __init__(self):
+    def __init__(self, broker_gmt_offset: Optional[int] = None):
+        """
+        Initialize time filter
+
+        Args:
+            broker_gmt_offset: Broker's GMT offset in hours (e.g., +2, -5)
+                              If None, uses cfg.BROKER_GMT_OFFSET
+        """
         self.enable_filters = cfg.ENABLE_TIME_FILTERS
+        self.broker_offset = broker_gmt_offset if broker_gmt_offset is not None else cfg.BROKER_GMT_OFFSET
 
         # Mean reversion windows
         self.mr_hours = set(cfg.MEAN_REVERSION_HOURS)
@@ -26,6 +36,30 @@ class TimeFilter:
         self.bo_hours = set(cfg.BREAKOUT_HOURS)
         self.bo_days = set(cfg.BREAKOUT_DAYS)
         self.bo_sessions = set(cfg.BREAKOUT_SESSIONS)
+
+    def broker_time_to_gmt(self, broker_time: datetime) -> datetime:
+        """
+        Convert broker time to GMT/UTC
+
+        Args:
+            broker_time: Datetime in broker timezone
+
+        Returns:
+            Datetime in GMT/UTC
+        """
+        return broker_time - timedelta(hours=self.broker_offset)
+
+    def gmt_to_broker_time(self, gmt_time: datetime) -> datetime:
+        """
+        Convert GMT/UTC to broker time
+
+        Args:
+            gmt_time: Datetime in GMT/UTC
+
+        Returns:
+            Datetime in broker timezone
+        """
+        return gmt_time + timedelta(hours=self.broker_offset)
 
     def get_session(self, current_time: datetime) -> str:
         """
@@ -53,12 +87,12 @@ class TimeFilter:
 
         return 'unknown'
 
-    def can_trade_mean_reversion(self, current_time: datetime) -> bool:
+    def can_trade_mean_reversion(self, broker_time: datetime) -> bool:
         """
         Check if mean reversion strategy can trade now
 
         Args:
-            current_time: Current datetime (UTC)
+            broker_time: Current datetime in broker timezone (from MT5)
 
         Returns:
             True if mean reversion can trade
@@ -66,9 +100,12 @@ class TimeFilter:
         if not self.enable_filters:
             return True
 
-        hour = current_time.hour
-        day = current_time.weekday()
-        session = self.get_session(current_time)
+        # Convert broker time to GMT for filtering
+        gmt_time = self.broker_time_to_gmt(broker_time)
+
+        hour = gmt_time.hour
+        day = gmt_time.weekday()
+        session = self.get_session(gmt_time)
 
         # Check hour filter
         in_hours = hour in self.mr_hours
@@ -81,12 +118,12 @@ class TimeFilter:
 
         return in_hours and in_days and in_session
 
-    def can_trade_breakout(self, current_time: datetime) -> bool:
+    def can_trade_breakout(self, broker_time: datetime) -> bool:
         """
         Check if breakout strategy can trade now
 
         Args:
-            current_time: Current datetime (UTC)
+            broker_time: Current datetime in broker timezone (from MT5)
 
         Returns:
             True if breakout can trade
@@ -97,9 +134,12 @@ class TimeFilter:
         if not cfg.BREAKOUT_ENABLED:
             return False
 
-        hour = current_time.hour
-        day = current_time.weekday()
-        session = self.get_session(current_time)
+        # Convert broker time to GMT for filtering
+        gmt_time = self.broker_time_to_gmt(broker_time)
+
+        hour = gmt_time.hour
+        day = gmt_time.weekday()
+        session = self.get_session(gmt_time)
 
         # Check hour filter
         in_hours = hour in self.bo_hours
@@ -112,48 +152,53 @@ class TimeFilter:
 
         return in_hours and in_days and in_session
 
-    def get_active_strategy(self, current_time: datetime) -> Optional[str]:
+    def get_active_strategy(self, broker_time: datetime) -> Optional[str]:
         """
         Determine which strategy should be active now
 
         Args:
-            current_time: Current datetime (UTC)
+            broker_time: Current datetime in broker timezone (from MT5)
 
         Returns:
             'mean_reversion', 'breakout', or None
         """
         # Check mean reversion first (higher priority if both active)
-        if self.can_trade_mean_reversion(current_time):
+        if self.can_trade_mean_reversion(broker_time):
             return 'mean_reversion'
 
         # Then check breakout
-        if self.can_trade_breakout(current_time):
+        if self.can_trade_breakout(broker_time):
             return 'breakout'
 
         return None
 
-    def get_time_status(self, current_time: datetime) -> Dict:
+    def get_time_status(self, broker_time: datetime) -> Dict:
         """
         Get comprehensive time filter status
 
         Args:
-            current_time: Current datetime (UTC)
+            broker_time: Current datetime in broker timezone (from MT5)
 
         Returns:
             Dict with detailed status information
         """
-        hour = current_time.hour
-        day = current_time.weekday()
-        day_name = current_time.strftime('%A')
-        session = self.get_session(current_time)
+        # Convert to GMT for checking
+        gmt_time = self.broker_time_to_gmt(broker_time)
 
-        can_mr = self.can_trade_mean_reversion(current_time)
-        can_bo = self.can_trade_breakout(current_time)
-        active_strategy = self.get_active_strategy(current_time)
+        hour = gmt_time.hour
+        day = gmt_time.weekday()
+        day_name = gmt_time.strftime('%A')
+        session = self.get_session(gmt_time)
+
+        can_mr = self.can_trade_mean_reversion(broker_time)
+        can_bo = self.can_trade_breakout(broker_time)
+        active_strategy = self.get_active_strategy(broker_time)
 
         return {
-            'current_time': current_time.strftime('%Y-%m-%d %H:%M:%S'),
-            'hour': hour,
+            'broker_time': broker_time.strftime('%Y-%m-%d %H:%M:%S'),
+            'gmt_time': gmt_time.strftime('%Y-%m-%d %H:%M:%S'),
+            'broker_offset': self.broker_offset,
+            'hour_gmt': hour,
             'day': day,
             'day_name': day_name,
             'session': session,
@@ -235,31 +280,66 @@ class TimeFilter:
 
 
 def test_time_filters():
-    """Test time filter functionality"""
-    filter = TimeFilter()
+    """Test time filter functionality with timezone conversion"""
 
-    print("Testing Time Filters\n")
+    # Test with different broker offsets
+    print("=" * 80)
+    print("TIMEZONE CONVERSION TEST")
+    print("=" * 80)
+
+    test_offsets = [0, 2, 3, -5]  # GMT, GMT+2, GMT+3, EST
+
+    for offset in test_offsets:
+        print(f"\n📍 BROKER TIMEZONE: GMT{offset:+d}")
+        print("-" * 80)
+
+        filter = TimeFilter(broker_gmt_offset=offset)
+
+        # Test time: 07:00 in broker time (should be MR window if GMT is 05:00)
+        broker_time = datetime(2025, 12, 23, 7, 0)  # Tuesday 07:00 broker time
+        gmt_time = filter.broker_time_to_gmt(broker_time)
+
+        print(f"Broker Time: {broker_time.strftime('%H:%M')}")
+        print(f"GMT Time:    {gmt_time.strftime('%H:%M')}")
+
+        can_mr = filter.can_trade_mean_reversion(broker_time)
+        can_bo = filter.can_trade_breakout(broker_time)
+        active = filter.get_active_strategy(broker_time)
+
+        print(f"Can trade MR: {can_mr}")
+        print(f"Can trade BO: {can_bo}")
+        print(f"Active Strategy: {active}")
+
+    # Detailed test with configured offset
+    print("\n" + "=" * 80)
+    print("DETAILED TEST - Using configured offset")
+    print("=" * 80)
+
+    filter = TimeFilter()  # Uses cfg.BROKER_GMT_OFFSET
+
+    print(f"\nBroker GMT Offset: {filter.broker_offset:+d} hours")
+    print("All trading hours below are in GMT/UTC\n")
     filter.print_schedule()
 
-    # Test specific times
+    # Test specific broker times (assuming they come from MT5)
     test_times = [
-        datetime(2025, 12, 23, 5, 0),   # Monday 05:00 (MR)
-        datetime(2025, 12, 23, 12, 0),  # Monday 12:00 (MR)
-        datetime(2025, 12, 23, 14, 0),  # Monday 14:00 (BO)
-        datetime(2025, 12, 23, 3, 0),   # Monday 03:00 (BO)
-        datetime(2025, 12, 23, 20, 0),  # Monday 20:00 (None)
+        datetime(2025, 12, 23, 5, 0),   # Broker time
+        datetime(2025, 12, 23, 12, 0),  # Broker time
+        datetime(2025, 12, 23, 14, 0),  # Broker time
+        datetime(2025, 12, 23, 3, 0),   # Broker time
+        datetime(2025, 12, 23, 20, 0),  # Broker time
     ]
 
     print("\n" + "=" * 80)
-    print("TEST SCENARIOS")
+    print("TEST SCENARIOS (Times from MT5/Broker)")
     print("=" * 80)
 
-    for test_time in test_times:
-        status = filter.get_time_status(test_time)
-        print(f"\n{status['current_time']} ({status['day_name']} {status['session']})")
+    for broker_time in test_times:
+        status = filter.get_time_status(broker_time)
+        print(f"\nBroker: {status['broker_time']} → GMT: {status['gmt_time']}")
+        print(f"  Day: {status['day_name']}, Session: {status['session']}")
         print(f"  Active Strategy: {status['active_strategy']}")
-        print(f"  Can MR: {status['can_trade_mean_reversion']}")
-        print(f"  Can BO: {status['can_trade_breakout']}")
+        print(f"  Can MR: {status['can_trade_mean_reversion']}, Can BO: {status['can_trade_breakout']}")
 
 
 if __name__ == '__main__':

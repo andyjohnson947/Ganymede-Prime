@@ -88,6 +88,12 @@ def parse_arguments():
         help='Paper trading mode (simulation only)'
     )
 
+    parser.add_argument(
+        '--test-mode',
+        action='store_true',
+        help='🔧 TEST MODE: Trade all day, bypass time filters (for testing only)'
+    )
+
     return parser.parse_args()
 
 
@@ -155,7 +161,14 @@ def main():
 
     try:
         # Initialize strategy
-        strategy = ConfluenceStrategy(mt5_manager)
+        strategy = ConfluenceStrategy(mt5_manager, test_mode=args.test_mode)
+
+        # Show test mode warning if enabled
+        if args.test_mode:
+            print("\n" + "=" * 80)
+            print("⚠️  TEST MODE ENABLED - TRADING ALL DAY (NO TIME FILTERS)")
+            print("=" * 80)
+            print()
 
         # Start trading
         logger.info(f"Starting strategy with symbols: {symbols}")

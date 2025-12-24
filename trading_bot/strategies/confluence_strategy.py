@@ -36,14 +36,16 @@ from config.strategy_config import (
 class ConfluenceStrategy:
     """Main trading strategy implementation"""
 
-    def __init__(self, mt5_manager: MT5Manager):
+    def __init__(self, mt5_manager: MT5Manager, test_mode: bool = False):
         """
         Initialize strategy
 
         Args:
             mt5_manager: MT5Manager instance (already connected)
+            test_mode: If True, bypass all time filters for testing
         """
         self.mt5 = mt5_manager
+        self.test_mode = test_mode
         self.signal_detector = SignalDetector()
         self.recovery_manager = RecoveryManager()
         self.risk_calculator = RiskCalculator()
@@ -334,8 +336,8 @@ class ConfluenceStrategy:
         if symbol not in self.market_data_cache:
             return
 
-        # Check if symbol is tradeable based on portfolio trading windows
-        if not self.portfolio_manager.is_symbol_tradeable(symbol):
+        # Check if symbol is tradeable based on portfolio trading windows (bypass in test mode)
+        if not self.test_mode and not self.portfolio_manager.is_symbol_tradeable(symbol):
             return  # Not in trading window for this symbol
 
         cache = self.market_data_cache[symbol]
@@ -346,9 +348,13 @@ class ConfluenceStrategy:
         current_time = get_current_time()
         signal = None
 
-        # Check which strategy can trade based on time filters
-        can_trade_mr = self.time_filter.can_trade_mean_reversion(current_time)
-        can_trade_bo = self.time_filter.can_trade_breakout(current_time)
+        # Check which strategy can trade based on time filters (bypass in test mode)
+        if self.test_mode:
+            can_trade_mr = True
+            can_trade_bo = True
+        else:
+            can_trade_mr = self.time_filter.can_trade_mean_reversion(current_time)
+            can_trade_bo = self.time_filter.can_trade_breakout(current_time)
 
         # Try mean reversion signal first (if allowed)
         if can_trade_mr:

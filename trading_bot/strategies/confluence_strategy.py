@@ -148,6 +148,8 @@ class ConfluenceStrategy:
 
             except Exception as e:
                 print(f"❌ Error processing {symbol}: {e}")
+                import traceback
+                traceback.print_exc()
                 continue
 
     def _refresh_market_data(self, symbol: str):

@@ -65,7 +65,14 @@ class VolumeProfile:
             # Distribute volume across the price range of the candle
             candle_low = row['low']
             candle_high = row['high']
-            candle_volume = row['volume']
+
+            # Get volume - handle both 'volume' and 'tick_volume' columns
+            if 'volume' in row:
+                candle_volume = row['volume']
+            elif 'tick_volume' in row:
+                candle_volume = row['tick_volume']
+            else:
+                candle_volume = 1  # Default if no volume data
 
             # Find bins that overlap with this candle
             bin_indices = np.where((bins >= candle_low) & (bins <= candle_high))[0]

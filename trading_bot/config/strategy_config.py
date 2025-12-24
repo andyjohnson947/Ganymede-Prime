@@ -119,6 +119,11 @@ HEDGE_TRIGGER_PIPS = 8  # Original: Activate hedge after 8 pips underwater
 HEDGE_RATIO = 5.0  # AGGRESSIVE: 5x overhedge for powerful counter-force (was 2.4x)
 MAX_HEDGES_PER_POSITION = 1  # Only one hedge per original trade
 
+# Recovery Stack Drawdown Protection
+# Close entire stack (original + grid + hedge + DCA) if net loss exceeds this multiplier
+# Example: Original trade expects $5 profit → kill stack at $20 loss (4x)
+STACK_DRAWDOWN_MULTIPLIER = 4.0  # Cut recovery stack at 4x expected profit loss
+
 # =============================================================================
 # DCA/MARTINGALE PARAMETERS (AGGRESSIVE RECOVERY SETTINGS)
 # =============================================================================

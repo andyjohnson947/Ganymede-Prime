@@ -298,16 +298,33 @@ class ConfluenceStrategy:
                         close_volume = partial_action['close_volume']
                         print(f"📉 Partial close: {ticket} - {partial_action['close_percent']}% at {partial_action['level_percent']}% to TP")
 
-                        # Close partial volume
-                        if self.mt5.close_partial_position(ticket, close_volume):
-                            print(f"✅ Partial close successful: {close_volume} lots")
+                        # Check if close_volume equals or exceeds position volume (final close)
+                        if close_volume >= position['volume']:
+                            # Close entire position instead of partial
+                            if self.mt5.close_position(ticket):
+                                print(f"✅ Full close successful: {position['volume']} lots (final partial close)")
+                                self.recovery_manager.untrack_position(ticket)
+                                self.stats['trades_closed'] += 1
+                        else:
+                            # Close partial volume
+                            if self.mt5.close_partial_position(ticket, close_volume):
+                                print(f"✅ Partial close successful: {close_volume} lots")
 
                 # Check exit conditions (only for tracked original positions)
-                # Priority order: 1) Profit target, 2) Time limit, 3) VWAP reversion
+                # Priority order: 0) Stack drawdown (risk protection), 1) Profit target, 2) Time limit, 3) VWAP reversion
 
-                # Get account info for profit target calculation
+                # Get account info and positions for checks
                 account_info = self.mt5.get_account_info()
                 all_positions = self.mt5.get_positions()
+
+                # 0. Check stack drawdown (HIGHEST PRIORITY - risk protection)
+                if self.recovery_manager.check_stack_drawdown(
+                    ticket=ticket,
+                    mt5_positions=all_positions,
+                    pip_value=pip_value
+                ):
+                    self._close_recovery_stack(ticket)
+                    continue
 
                 # 1. Check profit target (from config)
                 if account_info and self.recovery_manager.check_profit_target(

@@ -18,6 +18,7 @@ from config.strategy_config import (
     HEDGE_TRIGGER_PIPS,     # Fallback default
     HEDGE_RATIO,
     MAX_HEDGES_PER_POSITION,
+    STACK_DRAWDOWN_MULTIPLIER,  # Drawdown threshold for killing stacks
     DCA_ENABLED,
     DCA_TRIGGER_PIPS,       # Fallback default
     DCA_MAX_LEVELS,         # Fallback default
@@ -636,6 +637,65 @@ class RecoveryManager:
             print(f"   Open for: {hours_open:.1f} hours")
             print(f"   Limit: {hours_limit} hours")
             print(f"   Auto-closing stuck position...")
+            return True
+
+        return False
+
+    def check_stack_drawdown(
+        self,
+        ticket: int,
+        mt5_positions: List[Dict],
+        pip_value: float = 0.0001
+    ) -> bool:
+        """
+        Check if recovery stack has exceeded drawdown threshold.
+        Kills entire stack (original + grid + hedge + DCA) if net loss exceeds
+        STACK_DRAWDOWN_MULTIPLIER × expected profit from original trade.
+
+        Args:
+            ticket: Original position ticket
+            mt5_positions: List of all current MT5 positions
+            pip_value: Pip value for symbol (0.0001 for most pairs, 0.01 for JPY)
+
+        Returns:
+            bool: True if stack should be closed due to excessive drawdown
+        """
+        if ticket not in self.tracked_positions:
+            return False
+
+        position = self.tracked_positions[ticket]
+        symbol = position['symbol']
+        initial_volume = position['initial_volume']
+
+        # Calculate expected profit from original trade
+        try:
+            tp_settings = get_take_profit_settings(symbol)
+            tp_pips = tp_settings['take_profit_pips']
+        except (KeyError, Exception):
+            # If no TP settings, can't calculate - skip check
+            return False
+
+        # Calculate expected profit in dollars
+        # Formula: pips × pip_value × lot_size × 100,000 (standard lot)
+        expected_profit = tp_pips * pip_value * initial_volume * 100000
+
+        # Calculate drawdown threshold
+        drawdown_threshold = -1 * (expected_profit * STACK_DRAWDOWN_MULTIPLIER)
+
+        # Calculate current net P&L for entire stack
+        net_profit = self.calculate_net_profit(ticket, mt5_positions)
+
+        if net_profit is None:
+            return False
+
+        # Check if we've exceeded drawdown threshold (net profit is negative and below threshold)
+        if net_profit <= drawdown_threshold:
+            print(f"🛑 STACK DRAWDOWN EXCEEDED for {ticket}")
+            print(f"   Symbol: {symbol}")
+            print(f"   Expected profit: ${expected_profit:.2f}")
+            print(f"   Drawdown threshold: ${drawdown_threshold:.2f} ({STACK_DRAWDOWN_MULTIPLIER}x)")
+            print(f"   Current stack P&L: ${net_profit:.2f}")
+            print(f"   ⚠️  Killing entire recovery stack to limit losses")
             return True
 
         return False

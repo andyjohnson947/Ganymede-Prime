@@ -72,8 +72,13 @@ class BreakoutStrategy:
         if range_size_pips < self.min_range_pips:
             return None
 
-        # Calculate average volume
-        avg_volume = recent_data['volume'].mean()
+        # Calculate average volume - handle missing volume column
+        if 'volume' in recent_data.columns:
+            avg_volume = recent_data['volume'].mean()
+        elif 'tick_volume' in recent_data.columns:
+            avg_volume = recent_data['tick_volume'].mean()
+        else:
+            avg_volume = current_volume  # Fallback to current volume
         volume_spike = current_volume > (avg_volume * self.volume_multiplier)
 
         # Check for volatility compression (ATR decreasing)

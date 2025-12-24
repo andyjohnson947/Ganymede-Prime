@@ -372,7 +372,15 @@ class ConfluenceStrategy:
             # Get current price and volume
             latest_bar = h1_data.iloc[-1]
             current_price = latest_bar['close']
-            current_volume = latest_bar['volume']
+
+            # Get volume - handle both 'volume' and 'tick_volume' columns
+            if 'volume' in latest_bar:
+                current_volume = latest_bar['volume']
+            elif 'tick_volume' in latest_bar:
+                current_volume = latest_bar['tick_volume']
+            else:
+                current_volume = 0  # Default if no volume data
+                print(f"⚠️ Warning: No volume data for {symbol}, using 0")
 
             # Calculate ATR
             atr = h1_data['atr'].iloc[-1] if 'atr' in h1_data.columns else 0

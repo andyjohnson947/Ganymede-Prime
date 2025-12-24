@@ -293,8 +293,8 @@ class ConfluenceStrategy:
 
                     if partial_action:
                         # Execute partial close
-                        close_volume = partial_action['volume']
-                        print(f"📉 Partial close: {ticket} - {partial_action['percent']}% at {partial_action['level']}% to TP")
+                        close_volume = partial_action['close_volume']
+                        print(f"📉 Partial close: {ticket} - {partial_action['close_percent']}% at {partial_action['level_percent']}% to TP")
 
                         # Close partial volume
                         if self.mt5.close_partial_position(ticket, close_volume):

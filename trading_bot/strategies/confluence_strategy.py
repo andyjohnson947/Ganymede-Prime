@@ -28,6 +28,7 @@ from config.strategy_config import (
     PROFIT_TARGET_PERCENT,
     MAX_POSITION_HOURS,
     PARTIAL_CLOSE_ENABLED,
+    PARTIAL_CLOSE_RECOVERY,
     BREAKOUT_ENABLED,
     BREAKOUT_LOT_SIZE_MULTIPLIER,
 )
@@ -258,7 +259,8 @@ class ConfluenceStrategy:
                     self._execute_recovery_action(action)
 
                 # Check partial close levels (if enabled and position is in profit)
-                if self.partial_close_manager and position['profit'] > 0:
+                # Only apply to original positions if PARTIAL_CLOSE_RECOVERY is False
+                if self.partial_close_manager and position['profit'] > 0 and (PARTIAL_CLOSE_RECOVERY or not is_recovery_order):
                     # Track position if not already tracked
                     if ticket not in self.partial_close_manager.partial_closes:
                         # Calculate TP price based on VWAP or other exit logic

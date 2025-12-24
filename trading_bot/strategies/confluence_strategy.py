@@ -259,8 +259,8 @@ class ConfluenceStrategy:
                     self._execute_recovery_action(action)
 
                 # Check partial close levels (if enabled and position is in profit)
-                # Only apply to original positions if PARTIAL_CLOSE_RECOVERY is False
-                if self.partial_close_manager and position['profit'] > 0 and (PARTIAL_CLOSE_RECOVERY or not is_recovery_order):
+                # Apply to ALL profitable positions (original + grid entries)
+                if self.partial_close_manager and position['profit'] > 0:
                     # Track position if not already tracked
                     if ticket not in self.partial_close_manager.partial_closes:
                         # Calculate TP price based on VWAP or other exit logic

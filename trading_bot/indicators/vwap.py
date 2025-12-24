@@ -37,6 +37,14 @@ class VWAP:
         # Typical price
         df['typical_price'] = (df['high'] + df['low'] + df['close']) / 3
 
+        # Ensure volume column exists (handle MT5's tick_volume)
+        if 'volume' not in df.columns:
+            if 'tick_volume' in df.columns:
+                df['volume'] = df['tick_volume']
+            else:
+                print("⚠️ Warning: No volume data for VWAP, using equal-weighted average")
+                df['volume'] = 1  # Fallback to equal-weighted if no volume
+
         # Volume-weighted typical price
         df['vwtp'] = df['typical_price'] * df['volume']
 

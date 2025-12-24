@@ -41,6 +41,16 @@ def get_mt5_data(symbol: str, timeframe, bars: int):
 
     df = pd.DataFrame(rates)
     df['time'] = pd.to_datetime(df['time'], unit='s')
+
+    # Check if tick_volume exists and rename to volume (MT5 uses tick_volume)
+    if 'tick_volume' in df.columns and 'volume' not in df.columns:
+        df['volume'] = df['tick_volume']
+
+    # Ensure volume column exists
+    if 'volume' not in df.columns:
+        print(f"   ⚠️ Warning: No volume data available, using dummy volume")
+        df['volume'] = 1  # Dummy volume if not available
+
     return df
 
 

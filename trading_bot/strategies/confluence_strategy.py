@@ -240,16 +240,66 @@ class ConfluenceStrategy:
                         position_type=position['type'],
                         volume=position['volume']
                     )
-                else:
-                    # Skip recovery orders - they're already tracked within their parent position
-                    continue
 
-            # Check recovery triggers (only for tracked original positions)
-            if ticket in self.recovery_manager.tracked_positions:
+            # Get symbol info (needed for various checks)
+            current_price = position['price_current']
+            symbol_info = self.mt5.get_symbol_info(symbol)
+            pip_value = symbol_info.get('point', 0.0001)
+
+            # PARTIAL CLOSE: Apply to ALL profitable positions (original + grid + DCA)
+            # This runs for ALL positions, not just tracked ones
+            if self.partial_close_manager and position['profit'] > 0:
+                # Track position if not already tracked
+                if ticket not in self.partial_close_manager.partial_closes:
+                    # Calculate TP price based on VWAP or other exit logic
+                    # For now, use a reasonable default TP
+                    entry_price = position['price_open']
+                    pos_type = 'buy' if position['type'] == 0 else 'sell'
+
+                    # Estimate TP price (40 pips for EURUSD, adjust as needed)
+                    tp_distance = 40 * pip_value
+                    tp_price = entry_price + tp_distance if pos_type == 'buy' else entry_price - tp_distance
+
+                    self.partial_close_manager.track_position(
+                        ticket=ticket,
+                        entry_price=entry_price,
+                        volume=position['volume'],
+                        position_type=pos_type,
+                        tp_price=tp_price
+                    )
+
+                # Calculate current profit in pips
+                entry_price = position['price_open']
                 current_price = position['price_current']
-                symbol_info = self.mt5.get_symbol_info(symbol)
-                pip_value = symbol_info.get('point', 0.0001)
+                pip_diff = abs(current_price - entry_price) / pip_value
 
+                # Check for partial close triggers
+                partial_action = self.partial_close_manager.check_partial_close_levels(
+                    ticket=ticket,
+                    current_price=current_price,
+                    current_profit_pips=pip_diff
+                )
+
+                if partial_action:
+                    # Execute partial close
+                    close_volume = partial_action['close_volume']
+                    print(f"📉 Partial close: {ticket} - {partial_action['close_percent']}% at {partial_action['level_percent']}% to TP")
+
+                    # Check if close_volume equals or exceeds position volume (final close)
+                    if close_volume >= position['volume']:
+                        # Close entire position instead of partial
+                        if self.mt5.close_position(ticket):
+                            print(f"✅ Full close successful: {position['volume']} lots (final partial close)")
+                            self.recovery_manager.untrack_position(ticket)
+                            self.stats['trades_closed'] += 1
+                    else:
+                        # Close partial volume
+                        if self.mt5.close_partial_position(ticket, close_volume):
+                            print(f"✅ Partial close successful: {close_volume} lots")
+
+            # RECOVERY & EXIT CONDITIONS: Only for tracked original positions
+            if ticket in self.recovery_manager.tracked_positions:
+                # Check recovery triggers
                 recovery_actions = self.recovery_manager.check_all_recovery_triggers(
                     ticket, current_price, pip_value
                 )
@@ -257,58 +307,6 @@ class ConfluenceStrategy:
                 # Execute recovery actions
                 for action in recovery_actions:
                     self._execute_recovery_action(action)
-
-                # Check partial close levels (if enabled and position is in profit)
-                # Apply to ALL profitable positions (original + grid entries)
-                if self.partial_close_manager and position['profit'] > 0:
-                    # Track position if not already tracked
-                    if ticket not in self.partial_close_manager.partial_closes:
-                        # Calculate TP price based on VWAP or other exit logic
-                        # For now, use a reasonable default TP
-                        entry_price = position['price_open']
-                        pos_type = 'buy' if position['type'] == 0 else 'sell'
-
-                        # Estimate TP price (40 pips for EURUSD, adjust as needed)
-                        pip_value = symbol_info.get('point', 0.0001)
-                        tp_distance = 40 * pip_value
-                        tp_price = entry_price + tp_distance if pos_type == 'buy' else entry_price - tp_distance
-
-                        self.partial_close_manager.track_position(
-                            ticket=ticket,
-                            entry_price=entry_price,
-                            volume=position['volume'],
-                            position_type=pos_type,
-                            tp_price=tp_price
-                        )
-
-                    # Calculate current profit in pips
-                    entry_price = position['price_open']
-                    current_price = position['price_current']
-                    pip_diff = abs(current_price - entry_price) / pip_value
-
-                    # Check for partial close triggers
-                    partial_action = self.partial_close_manager.check_partial_close_levels(
-                        ticket=ticket,
-                        current_price=current_price,
-                        current_profit_pips=pip_diff
-                    )
-
-                    if partial_action:
-                        # Execute partial close
-                        close_volume = partial_action['close_volume']
-                        print(f"📉 Partial close: {ticket} - {partial_action['close_percent']}% at {partial_action['level_percent']}% to TP")
-
-                        # Check if close_volume equals or exceeds position volume (final close)
-                        if close_volume >= position['volume']:
-                            # Close entire position instead of partial
-                            if self.mt5.close_position(ticket):
-                                print(f"✅ Full close successful: {position['volume']} lots (final partial close)")
-                                self.recovery_manager.untrack_position(ticket)
-                                self.stats['trades_closed'] += 1
-                        else:
-                            # Close partial volume
-                            if self.mt5.close_partial_position(ticket, close_volume):
-                                print(f"✅ Partial close successful: {close_volume} lots")
 
                 # Check exit conditions (only for tracked original positions)
                 # Priority order: 0) Stack drawdown (risk protection), 1) Profit target, 2) Time limit, 3) VWAP reversion

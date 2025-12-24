@@ -96,7 +96,7 @@ def analyze_confluence(signal_detector, h1_data, d1_data, w1_data, symbol, bar_i
 def main():
     """Main diagnostic function"""
     print("\n" + "=" * 100)
-    print("🔍 SIGNAL DIAGNOSTIC TOOL - Last 48 Hours Analysis")
+    print("🔍 SIGNAL DIAGNOSTIC TOOL - Last 3 Weeks Analysis")
     print("=" * 100)
     print()
 
@@ -123,12 +123,12 @@ def main():
     # Analyze each symbol
     for symbol in symbols:
         print("\n" + "=" * 100)
-        print(f"📊 ANALYZING {symbol} - Last 48 Hours")
+        print(f"📊 ANALYZING {symbol} - Last 3 Weeks")
         print("=" * 100)
 
         # Fetch data
         print(f"\n📥 Fetching market data...")
-        h1_data = get_mt5_data(symbol, 'H1', 200)
+        h1_data = get_mt5_data(symbol, 'H1', 600)  # 3 weeks = ~504 hours, fetch 600 to be safe
         d1_data = get_mt5_data(symbol, 'D1', 100)
         w1_data = get_mt5_data(symbol, 'W1', 50)
 
@@ -150,13 +150,13 @@ def main():
         true_range = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
         h1_data['atr'] = true_range.rolling(window=14).mean()
 
-        # Analyze last 48 bars (48 hours)
+        # Analyze last 3 weeks
         now = datetime.now()
-        cutoff_time = now - timedelta(hours=48)
+        cutoff_time = now - timedelta(weeks=3)
 
         recent_bars = h1_data[h1_data['time'] >= cutoff_time]
 
-        print(f"\n📊 Analyzing {len(recent_bars)} bars from last 48 hours...")
+        print(f"\n📊 Analyzing {len(recent_bars)} bars from last 3 weeks...")
         print()
 
         signals_found = 0

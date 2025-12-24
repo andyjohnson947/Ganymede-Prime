@@ -204,7 +204,8 @@ BROKER_GMT_OFFSET = 0  # SET THIS TO YOUR BROKER'S OFFSET!
 # MEAN REVERSION TRADING HOURS (GMT/UTC)
 # Based on analysis: Best win rates (79.3% at Value Area, 73.5% at VWAP ±2σ)
 # Hours with highest success: 05:00 (100%), 12:00 (100%), 07:00 (93%), 06:00 (86%), 09:00 (80%)
-MEAN_REVERSION_HOURS = [5, 6, 7, 9, 12]
+# EXPANDED: Added 10, 11, 13 based on 3-week diagnostic showing high-quality signals (scores 10-13)
+MEAN_REVERSION_HOURS = [5, 6, 7, 9, 10, 11, 12, 13]
 
 # MEAN REVERSION TRADING DAYS (0=Monday, 6=Sunday)
 # Best days: Tuesday (73%), Wednesday (70%), Thursday (69%)
@@ -219,7 +220,8 @@ MEAN_REVERSION_SESSIONS = ['tokyo', 'london']
 # BREAKOUT TRADING HOURS (UTC)
 # Based on analysis: High volatility periods
 # Hours: 03:00 (70% win, high ATR), 14:00 (London/NY overlap)
-BREAKOUT_HOURS = [3, 14, 15, 16]  # 03:00 and 14:00-16:00 (London/NY overlap)
+# EXPANDED: Added 18-23 based on 3-week diagnostic showing HIGHEST quality signals (scores 12-13!)
+BREAKOUT_HOURS = [3, 14, 15, 16, 18, 19, 20, 21, 22, 23]  # Added evening hours with score 12-13 signals
 
 # BREAKOUT TRADING DAYS
 # Best days: Tuesday (62% win, high volatility), Friday (trend exhaustion)

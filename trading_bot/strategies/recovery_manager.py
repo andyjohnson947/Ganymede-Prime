@@ -98,7 +98,26 @@ class RecoveryManager:
             entry_price: Entry price
             position_type: 'buy' or 'sell'
             volume: Initial lot size
+
+        Raises:
+            ValueError: If invalid inputs provided
         """
+        # Input validation
+        if not isinstance(ticket, int) or ticket <= 0:
+            raise ValueError(f"Invalid ticket: {ticket} (must be positive integer)")
+
+        if not symbol or not isinstance(symbol, str):
+            raise ValueError(f"Invalid symbol: {symbol} (must be non-empty string)")
+
+        if position_type not in ('buy', 'sell'):
+            raise ValueError(f"Invalid position_type: {position_type} (must be 'buy' or 'sell')")
+
+        if entry_price <= 0:
+            raise ValueError(f"Invalid entry_price: {entry_price} (must be positive)")
+
+        if volume <= 0:
+            raise ValueError(f"Invalid volume: {volume} (must be positive)")
+
         self.tracked_positions[ticket] = {
             'ticket': ticket,
             'symbol': symbol,

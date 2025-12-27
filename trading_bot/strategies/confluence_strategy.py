@@ -164,28 +164,37 @@ class ConfluenceStrategy:
             if minutes_since < DATA_REFRESH_INTERVAL:
                 return  # Data still fresh
 
-        # Fetch H1 data
-        h1_data = self.mt5.get_historical_data(symbol, TIMEFRAME, bars=500)
-        if h1_data is None:
-            return
+        # Fetch H1 data with error handling
+        try:
+            h1_data = self.mt5.get_historical_data(symbol, TIMEFRAME, bars=500)
+            if h1_data is None:
+                print(f"⚠️ Failed to fetch H1 data for {symbol}")
+                return
 
-        # Calculate VWAP on H1 data
-        h1_data = self.signal_detector.vwap.calculate(h1_data)
+            # Calculate VWAP on H1 data
+            h1_data = self.signal_detector.vwap.calculate(h1_data)
 
-        # Calculate ATR for breakout detection
-        if 'atr' not in h1_data.columns:
-            # Simple ATR calculation (14 period)
-            high_low = h1_data['high'] - h1_data['low']
-            high_close = abs(h1_data['high'] - h1_data['close'].shift())
-            low_close = abs(h1_data['low'] - h1_data['close'].shift())
-            true_range = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
-            h1_data['atr'] = true_range.rolling(window=14).mean()
+            # Calculate ATR for breakout detection
+            if 'atr' not in h1_data.columns:
+                # Simple ATR calculation (14 period)
+                high_low = h1_data['high'] - h1_data['low']
+                high_close = abs(h1_data['high'] - h1_data['close'].shift())
+                low_close = abs(h1_data['low'] - h1_data['close'].shift())
+                true_range = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+                h1_data['atr'] = true_range.rolling(window=14).mean()
 
-        # Fetch HTF data
-        d1_data = self.mt5.get_historical_data(symbol, 'D1', bars=100)
-        w1_data = self.mt5.get_historical_data(symbol, 'W1', bars=50)
+            # Fetch HTF data
+            d1_data = self.mt5.get_historical_data(symbol, 'D1', bars=100)
+            w1_data = self.mt5.get_historical_data(symbol, 'W1', bars=50)
 
-        if d1_data is None or w1_data is None:
+            if d1_data is None or w1_data is None:
+                print(f"⚠️ Failed to fetch HTF data for {symbol}")
+                return
+
+        except Exception as e:
+            print(f"❌ Error fetching market data for {symbol}: {e}")
+            import traceback
+            traceback.print_exc()
             return
 
         # Cache the data

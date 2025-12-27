@@ -29,7 +29,33 @@ class PartialCloseManager:
             volume: Initial lot size
             position_type: 'buy' or 'sell'
             tp_price: Take profit target price
+
+        Raises:
+            ValueError: If invalid inputs provided
         """
+        # Input validation
+        if not isinstance(ticket, int) or ticket <= 0:
+            raise ValueError(f"Invalid ticket: {ticket} (must be positive integer)")
+
+        if entry_price <= 0:
+            raise ValueError(f"Invalid entry_price: {entry_price} (must be positive)")
+
+        if volume <= 0:
+            raise ValueError(f"Invalid volume: {volume} (must be positive)")
+
+        if position_type not in ('buy', 'sell'):
+            raise ValueError(f"Invalid position_type: {position_type} (must be 'buy' or 'sell')")
+
+        if tp_price <= 0:
+            raise ValueError(f"Invalid tp_price: {tp_price} (must be positive)")
+
+        # Validate TP is in correct direction
+        if position_type == 'buy' and tp_price <= entry_price:
+            raise ValueError(f"Invalid TP for buy: {tp_price} must be > entry {entry_price}")
+
+        if position_type == 'sell' and tp_price >= entry_price:
+            raise ValueError(f"Invalid TP for sell: {tp_price} must be < entry {entry_price}")
+
         self.partial_closes[ticket] = {
             'ticket': ticket,
             'entry_price': entry_price,

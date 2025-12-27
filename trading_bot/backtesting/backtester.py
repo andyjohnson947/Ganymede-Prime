@@ -9,10 +9,8 @@ from datetime import datetime, timedelta
 import logging
 
 from .mock_mt5 import MockMT5Manager
-from strategies.confluence_strategy import ConfluenceStrategy
-from utils.logger import setup_logger
-
-logger = setup_logger(__name__)
+from ..strategies.confluence_strategy import ConfluenceStrategy
+from ..utils.logger import logger
 
 
 class Backtester:

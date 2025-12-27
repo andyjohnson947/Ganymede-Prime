@@ -14,9 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from trading_bot.backtesting.backtester import Backtester
 from trading_bot.backtesting.performance import PerformanceAnalyzer
-from trading_bot.utils.logger import setup_logger
-
-logger = setup_logger(__name__)
+from trading_bot.utils.logger import logger
 
 
 def parse_args():

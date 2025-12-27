@@ -102,30 +102,30 @@ def main():
     args = parse_arguments()
 
     # Print banner
-    logger.info()
+    logger.info("")
     logger.info("=" * 80)
     logger.info("     CONFLUENCE TRADING BOT - UPGRADED")
     logger.info("     Timezone-Aware | Instrument-Specific Trading Windows")
     logger.info("=" * 80)
-    logger.info()
+    logger.info("")
     logger.info("🔄 Cache Status: CLEARED (Fresh imports enabled)")
-    logger.info()
+    logger.info("")
     logger.info("Strategy Parameters:")
     logger.info("  • Win Rate: 64.3%")
     logger.info("  • Minimum Confluence Score: 4")
     logger.info("  • Base Lot Size: 0.04 (updated)")
     logger.info("  • Grid Spacing: 8 pips")
     logger.info("  • Hedge Trigger: 8 pips (5x ratio)")
-    logger.info()
+    logger.info("")
     logger.info("NEW FEATURES:")
     logger.info("  ✓ Timezone: GMT/GMT+1 with automatic DST handling")
     logger.info("  ✓ Trading Windows: Instrument-specific entry/exit times")
     logger.info("  ✓ Restrictions: No bank holidays, weekends, Friday afternoons")
     logger.info("  ✓ Auto-close negative positions at window end")
     logger.info("  ✓ Auto cache clearing: Code changes always picked up")
-    logger.info()
+    logger.info("")
     logger.info("=" * 80)
-    logger.info()
+    logger.info("")
 
     # Check if GUI mode
     if args.gui:
@@ -168,7 +168,7 @@ def main():
             logger.info("\n" + "=" * 80)
             logger.warning("⚠️  TEST MODE ENABLED - TRADING ALL DAY (NO TIME FILTERS)")
             logger.info("=" * 80)
-            logger.info()
+            logger.info("")
 
         # Start trading
         logger.info(f"Starting strategy with symbols: {symbols}")

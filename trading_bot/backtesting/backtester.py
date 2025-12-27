@@ -149,7 +149,7 @@ class Backtester:
 
         # Add lookback buffer for higher timeframes to have historical context
         lookback_days = {
-            'H1': 5,    # 5 days extra for H1
+            'H1': 10,   # 10 days extra for H1 (ensures 100+ bars minimum)
             'D1': 60,   # 60 days extra for D1 (for indicators)
             'W1': 180   # 180 days extra for W1 (for weekly indicators)
         }

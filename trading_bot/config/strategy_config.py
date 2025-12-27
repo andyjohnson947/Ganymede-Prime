@@ -323,9 +323,9 @@ TRAIL_STOP_DISTANCE_PIPS = 15  # Trail stop 15 pips behind price
 
 # Historical data bars to load
 HISTORY_BARS = {
-    'H1': 10000,  # ~416 days
-    'D1': 500,    # ~2 years
-    'W1': 104,    # ~2 years
+    'H1': 1000,  # Doubled lookback for better analysis
+    'D1': 200,   # Doubled lookback
+    'W1': 100,   # Doubled lookback
 }
 
 # Data cache refresh interval (minutes)

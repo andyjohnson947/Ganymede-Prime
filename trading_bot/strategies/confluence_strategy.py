@@ -181,7 +181,7 @@ class ConfluenceStrategy:
 
         # Fetch H1 data with error handling
         try:
-            h1_data = self.mt5.get_historical_data(symbol, TIMEFRAME, bars=500)
+            h1_data = self.mt5.get_historical_data(symbol, TIMEFRAME, bars=1000)
             if h1_data is None:
                 logger.warning(f"Failed to fetch H1 data for {symbol}")
                 return
@@ -202,8 +202,8 @@ class ConfluenceStrategy:
                 h1_data['atr'] = true_range.rolling(window=14).mean()
 
             # Fetch HTF data
-            d1_data = self.mt5.get_historical_data(symbol, 'D1', bars=100)
-            w1_data = self.mt5.get_historical_data(symbol, 'W1', bars=50)
+            d1_data = self.mt5.get_historical_data(symbol, 'D1', bars=200)
+            w1_data = self.mt5.get_historical_data(symbol, 'W1', bars=100)
 
             if d1_data is None or w1_data is None:
                 logger.warning(f"Failed to fetch HTF data for {symbol}")

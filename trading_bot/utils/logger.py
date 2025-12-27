@@ -8,7 +8,7 @@ import io
 from datetime import datetime
 from pathlib import Path
 
-from config.strategy_config import LOG_LEVEL, LOG_FILE, LOG_TRADES, LOG_SIGNALS
+from ...config.strategy_config import LOG_LEVEL, LOG_FILE, LOG_TRADES, LOG_SIGNALS
 
 
 class TradingLogger:

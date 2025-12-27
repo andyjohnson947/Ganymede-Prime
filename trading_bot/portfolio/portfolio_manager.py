@@ -10,8 +10,8 @@ from datetime import datetime, time, timedelta
 from typing import Dict, List, Optional, Tuple
 from enum import Enum
 
-from utils.timezone_manager import get_timezone_manager
-from portfolio.instruments_config import get_instruments_config
+from ..utils.timezone_manager import get_timezone_manager
+from ..portfolio.instruments_config import get_instruments_config
 
 
 class WindowStatus(Enum):

@@ -7,8 +7,8 @@ import pandas as pd
 import numpy as np
 from typing import Tuple, Dict
 
-from config.strategy_config import VWAP_PERIOD, VWAP_BAND_MULTIPLIERS
-from utils.volume_utils import ensure_volume_column
+from ...config.strategy_config import VWAP_PERIOD, VWAP_BAND_MULTIPLIERS
+from ...utils.volume_utils import ensure_volume_column
 
 
 class VWAP:

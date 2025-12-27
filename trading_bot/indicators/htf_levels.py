@@ -12,9 +12,9 @@ import pandas as pd
 from datetime import datetime, timedelta
 from typing import Dict, Optional
 
-from indicators.volume_profile import VolumeProfile
-from indicators.vwap import VWAP
-from config.strategy_config import HTF_TIMEFRAMES
+from ..indicators.volume_profile import VolumeProfile
+from ..indicators.vwap import VWAP
+from ..config.strategy_config import HTF_TIMEFRAMES
 
 
 class HTFLevels:

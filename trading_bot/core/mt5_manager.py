@@ -9,8 +9,8 @@ from typing import Optional, Dict, List, Tuple
 import pandas as pd
 import time
 
-from utils.logger import logger
-from config.strategy_config import (
+from ...utils.logger import logger
+from ...config.strategy_config import (
     MT5_TIMEOUT,
     MT5_MAGIC_NUMBER,
     SYMBOLS,

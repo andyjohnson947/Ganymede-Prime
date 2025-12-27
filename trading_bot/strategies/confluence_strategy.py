@@ -146,7 +146,7 @@ class ConfluenceStrategy:
                 return  # Data still fresh
 
         # Fetch H1 data
-        h1_data = self.mt5.get_historical_data(symbol, TIMEFRAME, bars=500)
+        h1_data = self.mt5.get_historical_data(symbol, TIMEFRAME, bars=1000)
         if h1_data is None:
             return
 
@@ -154,8 +154,8 @@ class ConfluenceStrategy:
         h1_data = self.signal_detector.vwap.calculate(h1_data)
 
         # Fetch HTF data
-        d1_data = self.mt5.get_historical_data(symbol, 'D1', bars=100)
-        w1_data = self.mt5.get_historical_data(symbol, 'W1', bars=50)
+        d1_data = self.mt5.get_historical_data(symbol, 'D1', bars=200)
+        w1_data = self.mt5.get_historical_data(symbol, 'W1', bars=100)
 
         if d1_data is None or w1_data is None:
             return

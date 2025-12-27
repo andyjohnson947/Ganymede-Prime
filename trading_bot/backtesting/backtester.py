@@ -71,7 +71,12 @@ class Backtester:
         Returns:
             DataFrame with OHLCV data
         """
-        import MetaTrader5 as mt5
+        try:
+            import MetaTrader5 as mt5
+        except ImportError:
+            logger.error("MetaTrader5 module not installed. Install with: pip install MetaTrader5")
+            logger.error("Or use --source csv to load data from CSV files")
+            return pd.DataFrame()
 
         # Map timeframe string to MT5 constant
         timeframe_map = {

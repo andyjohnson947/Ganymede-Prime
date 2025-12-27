@@ -4,10 +4,16 @@ Simulates MT5 broker behavior using historical data
 """
 
 import pandas as pd
-import MetaTrader5 as mt5
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 import numpy as np
+
+# Optional MT5 import for data loading (not needed for mock functionality)
+try:
+    import MetaTrader5 as mt5
+    MT5_AVAILABLE = True
+except ImportError:
+    MT5_AVAILABLE = False
 
 
 class MockMT5Manager:

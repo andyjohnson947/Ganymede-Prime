@@ -111,11 +111,20 @@ class MockMT5Manager:
         """
         key = (symbol, timeframe)
         if key not in self.historical_data:
+            # Debug: print available keys
+            import logging
+            logger = logging.getLogger("TradingBot")
+            available = [f"{k[0]}_{k[1]}" for k in self.historical_data.keys()]
+            logger.debug(f"Data not found for {symbol} {timeframe}. Available: {', '.join(available)}")
             return None
 
         data = self.historical_data[key]
 
         # Filter data up to current_time
+        if self.current_time is None:
+            # If no current time set, return latest bars
+            return data.tail(bars).copy()
+
         mask = data['time'] <= self.current_time
         available_data = data[mask]
 

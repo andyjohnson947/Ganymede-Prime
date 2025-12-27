@@ -147,12 +147,23 @@ class Backtester:
 
         logger.info(f"Loading data from {start_date} to {end_date}")
 
+        # Add lookback buffer for higher timeframes to have historical context
+        lookback_days = {
+            'H1': 5,    # 5 days extra for H1
+            'D1': 60,   # 60 days extra for D1 (for indicators)
+            'W1': 180   # 180 days extra for W1 (for weekly indicators)
+        }
+
         for symbol in self.symbols:
             for timeframe in ['H1', 'D1', 'W1']:
-                logger.info(f"Loading {symbol} {timeframe}...")
+                # Calculate buffered start date
+                buffer_days = lookback_days.get(timeframe, 0)
+                buffered_start = start_date - timedelta(days=buffer_days)
+
+                logger.info(f"Loading {symbol} {timeframe} (with {buffer_days}-day lookback)...")
 
                 if data_source == 'mt5':
-                    data = self.load_data_from_mt5(symbol, timeframe, start_date, end_date)
+                    data = self.load_data_from_mt5(symbol, timeframe, buffered_start, end_date)
                 elif data_source == 'csv':
                     if data_paths is None:
                         raise ValueError("data_paths required for CSV source")
@@ -161,7 +172,13 @@ class Backtester:
                     if key not in data_paths:
                         raise ValueError(f"No CSV path for {symbol} {timeframe}")
 
+                    # Load CSV data (will be filtered by date range after loading)
                     data = self.load_data_from_csv(symbol, timeframe, data_paths[key])
+
+                    # Filter to buffered date range
+                    if len(data) > 0 and 'time' in data.columns:
+                        mask = (data['time'] >= buffered_start) & (data['time'] <= end_date)
+                        data = data[mask].copy()
                 else:
                     raise ValueError(f"Unknown data source: {data_source}")
 
@@ -171,7 +188,17 @@ class Backtester:
 
                 # Load into mock MT5
                 self.mock_mt5.load_historical_data(symbol, timeframe, data)
-                logger.info(f"Loaded {len(data)} bars for {symbol} {timeframe}")
+
+                # Log data range for debugging
+                if len(data) > 0:
+                    first_time = data['time'].iloc[0]
+                    last_time = data['time'].iloc[-1]
+                    logger.info(
+                        f"Loaded {len(data)} bars for {symbol} {timeframe} "
+                        f"({first_time.strftime('%Y-%m-%d')} to {last_time.strftime('%Y-%m-%d')})"
+                    )
+                else:
+                    logger.warning(f"Loaded 0 bars for {symbol} {timeframe}")
 
     def run(self, check_interval_hours: int = 1) -> None:
         """

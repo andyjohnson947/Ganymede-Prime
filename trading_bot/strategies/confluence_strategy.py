@@ -547,6 +547,10 @@ class ConfluenceStrategy:
         Returns:
             Signal dict or None
         """
+        # DEBUG: Entry point logging
+        if self.test_mode:
+            logger.info(f"   🔍 Checking breakout signal for {symbol}...")
+
         # Get current price and volume
         latest_bar = h1_data.iloc[-1]
         current_price = latest_bar['close']

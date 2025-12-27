@@ -54,6 +54,10 @@ class SignalDetector:
         Returns:
             Dict with signal info or None if no signal
         """
+        # DEBUG: Entry point logging
+        from ..utils.logger import logger as debug_logger
+        debug_logger.info(f"   🔍 Checking mean reversion signal for {symbol}...")
+
         if len(current_data) < 200:
             from ..utils.logger import logger as debug_logger
             debug_logger.info(f"   ⚠️ MR skipped: Insufficient data ({len(current_data)} bars, need 200)")

@@ -63,6 +63,10 @@ class BreakoutStrategy:
         Returns:
             Signal dict if breakout detected, None otherwise
         """
+        # DEBUG: Entry point logging
+        from ..utils.logger import logger as debug_logger
+        debug_logger.info(f"   🔍 detect_range_breakout called: price={current_price:.5f}, vol={current_volume:.0f}, atr={atr:.5f}, data_len={len(data)}")
+
         if len(data) < self.lookback:
             from ..utils.logger import logger as debug_logger
             debug_logger.info(f"   ⚠️ BO skipped: Insufficient data ({len(data)} bars, need {self.lookback})")

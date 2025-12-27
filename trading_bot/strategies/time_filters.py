@@ -6,6 +6,7 @@ Handles automatic timezone conversion between broker time and GMT/UTC
 
 from datetime import datetime, time, timedelta
 from typing import Dict, Optional
+from utils.logger import logger
 from config import strategy_config as cfg
 
 
@@ -234,23 +235,23 @@ class TimeFilter:
         """
         Print the complete trading schedule
         """
-        print("=" * 80)
-        print("TRADING SCHEDULE")
-        print("=" * 80)
+        logger.info("=" * 80)
+        logger.info("TRADING SCHEDULE")
+        logger.info("=" * 80)
 
-        print("\n📊 MEAN REVERSION STRATEGY")
-        print(f"   Hours: {sorted(self.mr_hours)}")
-        print(f"   Days: {[self._day_name(d) for d in sorted(self.mr_days)]}")
-        print(f"   Sessions: {sorted(self.mr_sessions)}")
+        logger.info("\n📊 MEAN REVERSION STRATEGY")
+        logger.info(f"   Hours: {sorted(self.mr_hours)}")
+        logger.info(f"   Days: {[self._day_name(d) for d in sorted(self.mr_days)]}")
+        logger.info(f"   Sessions: {sorted(self.mr_sessions)}")
 
-        print("\n📈 BREAKOUT STRATEGY")
-        print(f"   Enabled: {cfg.BREAKOUT_ENABLED}")
+        logger.info("\n📈 BREAKOUT STRATEGY")
+        logger.info(f"   Enabled: {cfg.BREAKOUT_ENABLED}")
         if cfg.BREAKOUT_ENABLED:
-            print(f"   Hours: {sorted(self.bo_hours)}")
-            print(f"   Days: {[self._day_name(d) for d in sorted(self.bo_days)]}")
-            print(f"   Sessions: {sorted(self.bo_sessions)}")
+            logger.info(f"   Hours: {sorted(self.bo_hours)}")
+            logger.info(f"   Days: {[self._day_name(d) for d in sorted(self.bo_days)]}")
+            logger.info(f"   Sessions: {sorted(self.bo_sessions)}")
 
-        print("\n⏰ HOURLY BREAKDOWN (UTC)")
+        logger.info("\n⏰ HOURLY BREAKDOWN (UTC)")
         for hour in range(24):
             strategies = []
             if hour in self.mr_hours:
@@ -260,7 +261,7 @@ class TimeFilter:
 
             if strategies:
                 session = self._get_session_for_hour(hour)
-                print(f"   {hour:02d}:00 - {', '.join(strategies)} ({session})")
+                logger.info(f"   {hour:02d}:00 - {', '.join(strategies)} ({session})")
 
     def _day_name(self, day_num: int) -> str:
         """Convert day number to name"""
@@ -283,15 +284,15 @@ def test_time_filters():
     """Test time filter functionality with timezone conversion"""
 
     # Test with different broker offsets
-    print("=" * 80)
-    print("TIMEZONE CONVERSION TEST")
-    print("=" * 80)
+    logger.info("=" * 80)
+    logger.info("TIMEZONE CONVERSION TEST")
+    logger.info("=" * 80)
 
     test_offsets = [0, 2, 3, -5]  # GMT, GMT+2, GMT+3, EST
 
     for offset in test_offsets:
-        print(f"\n📍 BROKER TIMEZONE: GMT{offset:+d}")
-        print("-" * 80)
+        logger.info(f"\n📍 BROKER TIMEZONE: GMT{offset:+d}")
+        logger.info("-" * 80)
 
         filter = TimeFilter(broker_gmt_offset=offset)
 
@@ -299,26 +300,26 @@ def test_time_filters():
         broker_time = datetime(2025, 12, 23, 7, 0)  # Tuesday 07:00 broker time
         gmt_time = filter.broker_time_to_gmt(broker_time)
 
-        print(f"Broker Time: {broker_time.strftime('%H:%M')}")
-        print(f"GMT Time:    {gmt_time.strftime('%H:%M')}")
+        logger.info(f"Broker Time: {broker_time.strftime('%H:%M')}")
+        logger.info(f"GMT Time:    {gmt_time.strftime('%H:%M')}")
 
         can_mr = filter.can_trade_mean_reversion(broker_time)
         can_bo = filter.can_trade_breakout(broker_time)
         active = filter.get_active_strategy(broker_time)
 
-        print(f"Can trade MR: {can_mr}")
-        print(f"Can trade BO: {can_bo}")
-        print(f"Active Strategy: {active}")
+        logger.info(f"Can trade MR: {can_mr}")
+        logger.info(f"Can trade BO: {can_bo}")
+        logger.info(f"Active Strategy: {active}")
 
     # Detailed test with configured offset
-    print("\n" + "=" * 80)
-    print("DETAILED TEST - Using configured offset")
-    print("=" * 80)
+    logger.info("\n" + "=" * 80)
+    logger.info("DETAILED TEST - Using configured offset")
+    logger.info("=" * 80)
 
     filter = TimeFilter()  # Uses cfg.BROKER_GMT_OFFSET
 
-    print(f"\nBroker GMT Offset: {filter.broker_offset:+d} hours")
-    print("All trading hours below are in GMT/UTC\n")
+    logger.info(f"\nBroker GMT Offset: {filter.broker_offset:+d} hours")
+    logger.info("All trading hours below are in GMT/UTC\n")
     filter.print_schedule()
 
     # Test specific broker times (assuming they come from MT5)
@@ -330,16 +331,16 @@ def test_time_filters():
         datetime(2025, 12, 23, 20, 0),  # Broker time
     ]
 
-    print("\n" + "=" * 80)
-    print("TEST SCENARIOS (Times from MT5/Broker)")
-    print("=" * 80)
+    logger.info("\n" + "=" * 80)
+    logger.info("TEST SCENARIOS (Times from MT5/Broker)")
+    logger.info("=" * 80)
 
     for broker_time in test_times:
         status = filter.get_time_status(broker_time)
-        print(f"\nBroker: {status['broker_time']} → GMT: {status['gmt_time']}")
-        print(f"  Day: {status['day_name']}, Session: {status['session']}")
-        print(f"  Active Strategy: {status['active_strategy']}")
-        print(f"  Can MR: {status['can_trade_mean_reversion']}, Can BO: {status['can_trade_breakout']}")
+        logger.info(f"\nBroker: {status['broker_time']} → GMT: {status['gmt_time']}")
+        logger.info(f"  Day: {status['day_name']}, Session: {status['session']}")
+        logger.info(f"  Active Strategy: {status['active_strategy']}")
+        logger.info(f"  Can MR: {status['can_trade_mean_reversion']}, Can BO: {status['can_trade_breakout']}")
 
 
 if __name__ == '__main__':

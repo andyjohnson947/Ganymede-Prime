@@ -10,6 +10,8 @@ from typing import Dict, List, Optional, Tuple
 from config import strategy_config as cfg
 
 from utils.volume_utils import get_volume_from_dataframe
+from indicators.adx import calculate_adx
+from indicators.hurst import calculate_hurst_exponent
 
 
 class BreakoutStrategy:
@@ -91,6 +93,53 @@ class BreakoutStrategy:
         if (bullish_breakout or bearish_breakout) and volume_spike:
             direction = 'BUY' if bullish_breakout else 'SELL'
 
+            # ENHANCED: Add ADX + Hurst confirmation for higher probability breakouts
+            # Calculate ADX for trend strength
+            data_with_adx = calculate_adx(data.copy(), period=14)
+            if len(data_with_adx) > 0:
+                latest_adx = data_with_adx.iloc[-1]
+                adx = latest_adx['adx']
+                plus_di = latest_adx['plus_di']
+                minus_di = latest_adx['minus_di']
+            else:
+                adx = 0
+                plus_di = 0
+                minus_di = 0
+
+            # Calculate Hurst exponent for trend persistence
+            hurst = calculate_hurst_exponent(data['close'].tail(100))
+
+            # Validate breakout direction with trend indicators
+            trend_confirmed = False
+            confidence = 'low'
+
+            if direction == 'BUY':
+                # Bullish breakout: ADX shows trend strength + +DI > -DI + Hurst shows trending
+                if adx >= 25 and plus_di > minus_di and hurst > 0.55:
+                    trend_confirmed = True
+                    confidence = 'very_high'
+                elif adx >= 20 and plus_di > minus_di:
+                    trend_confirmed = True
+                    confidence = 'high'
+                elif hurst > 0.55:
+                    trend_confirmed = True
+                    confidence = 'medium'
+            else:  # SELL
+                # Bearish breakout: ADX shows trend strength + -DI > +DI + Hurst shows trending
+                if adx >= 25 and minus_di > plus_di and hurst > 0.55:
+                    trend_confirmed = True
+                    confidence = 'very_high'
+                elif adx >= 20 and minus_di > plus_di:
+                    trend_confirmed = True
+                    confidence = 'high'
+                elif hurst > 0.55:
+                    trend_confirmed = True
+                    confidence = 'medium'
+
+            # Only take breakout if trend confirmed OR volume compression is very strong
+            if not trend_confirmed and not (is_compressed and volume_spike):
+                return None  # Skip false breakout
+
             # Calculate targets and stops
             if direction == 'BUY':
                 target = current_price + (range_high - range_low)  # Range projection
@@ -110,7 +159,10 @@ class BreakoutStrategy:
                 'range_size_pips': range_size_pips,
                 'volume_spike': volume_spike,
                 'compressed': is_compressed,
-                'confidence': 'high' if volume_spike and is_compressed else 'medium'
+                'confidence': confidence,
+                'adx': adx,
+                'hurst': hurst,
+                'trend_confirmed': trend_confirmed
             }
 
         return None

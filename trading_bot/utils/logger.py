@@ -4,6 +4,7 @@ Logging utility for trading bot
 
 import logging
 import sys
+import io
 from datetime import datetime
 from pathlib import Path
 
@@ -27,12 +28,16 @@ class TradingLogger:
         log_dir = Path("logs")
         log_dir.mkdir(exist_ok=True)
 
-        # File handler
+        # File handler with UTF-8 encoding
         log_path = log_dir / LOG_FILE
-        file_handler = logging.FileHandler(log_path)
+        file_handler = logging.FileHandler(log_path, encoding='utf-8')
         file_handler.setLevel(logging.DEBUG)
 
-        # Console handler
+        # Console handler with UTF-8 encoding (fixes emoji rendering on Windows)
+        # Wrap stdout with UTF-8 TextIOWrapper to handle emoji characters
+        if sys.stdout.encoding != 'utf-8':
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setLevel(getattr(logging, LOG_LEVEL))
 
@@ -64,7 +69,7 @@ class TradingLogger:
         logger = logging.getLogger(name)
         logger.setLevel(logging.INFO)
 
-        handler = logging.FileHandler(file_path)
+        handler = logging.FileHandler(file_path, encoding='utf-8')
         handler.setLevel(logging.INFO)
 
         formatter = logging.Formatter(
@@ -76,25 +81,59 @@ class TradingLogger:
         logger.addHandler(handler)
         return logger
 
+    def _safe_message(self, message: str) -> str:
+        """
+        Ensure message is safe for logging (fallback for encoding issues)
+
+        Args:
+            message: Message to sanitize
+
+        Returns:
+            Safe message string
+        """
+        try:
+            # Try to encode to detect issues
+            message.encode('utf-8')
+            return message
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            # Strip non-ASCII characters if encoding fails
+            return message.encode('ascii', errors='ignore').decode('ascii')
+
     def info(self, message: str):
         """Log info message"""
-        self.logger.info(message)
+        try:
+            self.logger.info(message)
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            # Fallback: log without emojis
+            self.logger.info(self._safe_message(message))
 
     def debug(self, message: str):
         """Log debug message"""
-        self.logger.debug(message)
+        try:
+            self.logger.debug(message)
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            self.logger.debug(self._safe_message(message))
 
     def warning(self, message: str):
         """Log warning message"""
-        self.logger.warning(message)
+        try:
+            self.logger.warning(message)
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            self.logger.warning(self._safe_message(message))
 
     def error(self, message: str):
         """Log error message"""
-        self.logger.error(message)
+        try:
+            self.logger.error(message)
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            self.logger.error(self._safe_message(message))
 
     def critical(self, message: str):
         """Log critical message"""
-        self.logger.critical(message)
+        try:
+            self.logger.critical(message)
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            self.logger.critical(self._safe_message(message))
 
     def log_trade(self, trade_info: dict):
         """

@@ -44,19 +44,19 @@ class MT5Manager:
             bool: True if connection successful
         """
         if not mt5.initialize():
-            logger.error(f"❌ Failed to initialize MT5: {mt5.last_error()}")
+            logger.error(f"Failed to initialize MT5: {mt5.last_error()}")
             return False
 
         authorized = mt5.login(self.login, self.password, self.server)
 
         if not authorized:
-            logger.error(f"❌ Failed to login to MT5: {mt5.last_error()}")
+            logger.error(f"Failed to login to MT5: {mt5.last_error()}")
             mt5.shutdown()
             return False
 
         self.connected = True
         account_info = mt5.account_info()
-        logger.info(f"✅ Connected to MT5")
+        logger.info(f"Connected to MT5")
         logger.info(f"   Account: {account_info.login}")
         logger.info(f"   Balance: ${account_info.balance:.2f}")
         logger.info(f"   Equity: ${account_info.equity:.2f}")
@@ -69,7 +69,7 @@ class MT5Manager:
         if self.connected:
             mt5.shutdown()
             self.connected = False
-            logger.info("✅ Disconnected from MT5")
+            logger.info("Disconnected from MT5")
 
     def get_account_info(self) -> Optional[Dict]:
         """
@@ -115,7 +115,7 @@ class MT5Manager:
             DataFrame with OHLCV data or None
         """
         if not self.connected:
-            logger.error("❌ Not connected to MT5")
+            logger.error("Not connected to MT5")
             return None
 
         # Convert timeframe string to MT5 constant
@@ -133,7 +133,7 @@ class MT5Manager:
 
         tf = tf_map.get(timeframe)
         if tf is None:
-            logger.error(f"❌ Invalid timeframe: {timeframe}")
+            logger.error(f"Invalid timeframe: {timeframe}")
             return None
 
         # Fetch data
@@ -143,7 +143,7 @@ class MT5Manager:
             rates = mt5.copy_rates_from_pos(symbol, tf, 0, bars)
 
         if rates is None or len(rates) == 0:
-            logger.error(f"❌ Failed to fetch data for {symbol} {timeframe}: {mt5.last_error()}")
+            logger.error(f"Failed to fetch data for {symbol} {timeframe}: {mt5.last_error()}")
             return None
 
         # Convert to DataFrame
@@ -161,7 +161,7 @@ class MT5Manager:
             'real_volume': 'real_volume'
         }, inplace=True)
 
-        logger.info(f"✅ Fetched {len(df)} bars for {symbol} {timeframe}")
+        logger.info(f"Fetched {len(df)} bars for {symbol} {timeframe}")
         return df
 
     def get_positions(self, symbol: Optional[str] = None) -> List[Dict]:
@@ -233,18 +233,18 @@ class MT5Manager:
             Order ticket number or None if failed
         """
         if not self.connected:
-            logger.error("❌ Not connected to MT5")
+            logger.error("Not connected to MT5")
             return None
 
         # Get symbol info
         symbol_info = mt5.symbol_info(symbol)
         if symbol_info is None:
-            logger.error(f"❌ Symbol {symbol} not found")
+            logger.error(f"Symbol {symbol} not found")
             return None
 
         if not symbol_info.visible:
             if not mt5.symbol_select(symbol, True):
-                logger.error(f"❌ Failed to select symbol {symbol}")
+                logger.error(f"Failed to select symbol {symbol}")
                 return None
 
         # Prepare request
@@ -282,14 +282,14 @@ class MT5Manager:
         result = mt5.order_send(request)
 
         if result is None:
-            logger.error(f"❌ Order send failed: {mt5.last_error()}")
+            logger.error(f"Order send failed: {mt5.last_error()}")
             return None
 
         if result.retcode != mt5.TRADE_RETCODE_DONE:
-            logger.error(f"❌ Order failed: {result.comment}")
+            logger.error(f"Order failed: {result.comment}")
             return None
 
-        logger.info(f"✅ Order placed: {order_type.upper()} {volume} {symbol} @ {price}")
+        logger.info(f"Order placed: {order_type.upper()} {volume} {symbol} @ {price}")
         logger.info(f"   Ticket: {result.order}")
 
         return result.order
@@ -305,13 +305,13 @@ class MT5Manager:
             bool: True if closed successfully
         """
         if not self.connected:
-            logger.error("❌ Not connected to MT5")
+            logger.error("Not connected to MT5")
             return False
 
         # Get position info
         position = mt5.positions_get(ticket=ticket)
         if not position:
-            logger.error(f"❌ Position {ticket} not found")
+            logger.error(f"Position {ticket} not found")
             return False
 
         position = position[0]
@@ -323,7 +323,7 @@ class MT5Manager:
         # Get symbol info to determine filling mode
         symbol_info = mt5.symbol_info(symbol)
         if symbol_info is None:
-            logger.error(f"❌ Symbol {symbol} not found")
+            logger.error(f"Symbol {symbol} not found")
             return False
 
         # Determine supported filling mode
@@ -354,14 +354,14 @@ class MT5Manager:
         result = mt5.order_send(request)
 
         if result is None:
-            logger.error(f"❌ Close order failed: {mt5.last_error()}")
+            logger.error(f"Close order failed: {mt5.last_error()}")
             return False
 
         if result.retcode != mt5.TRADE_RETCODE_DONE:
-            logger.error(f"❌ Close failed: {result.comment}")
+            logger.error(f"Close failed: {result.comment}")
             return False
 
-        logger.info(f"✅ Position closed: {ticket}")
+        logger.info(f"Position closed: {ticket}")
         return True
 
     def close_partial_position(self, ticket: int, partial_volume: float) -> bool:
@@ -376,24 +376,24 @@ class MT5Manager:
             bool: True if closed successfully
         """
         if not self.connected:
-            logger.error("❌ Not connected to MT5")
+            logger.error("Not connected to MT5")
             return False
 
         # Get position info
         position = mt5.positions_get(ticket=ticket)
         if not position:
-            logger.error(f"❌ Position {ticket} not found")
+            logger.error(f"Position {ticket} not found")
             return False
 
         position = position[0]
 
         # Validate partial volume
         if partial_volume >= position.volume:
-            logger.error(f"❌ Partial volume {partial_volume} must be less than position volume {position.volume}")
+            logger.error(f"Partial volume {partial_volume} must be less than position volume {position.volume}")
             return False
 
         if partial_volume <= 0:
-            logger.error(f"❌ Partial volume must be greater than 0")
+            logger.error(f"Partial volume must be greater than 0")
             return False
 
         # Prepare close request
@@ -402,7 +402,7 @@ class MT5Manager:
         # Get symbol info to determine filling mode and validate volume
         symbol_info = mt5.symbol_info(symbol)
         if symbol_info is None:
-            logger.error(f"❌ Symbol {symbol} not found")
+            logger.error(f"Symbol {symbol} not found")
             return False
 
         # Round volume to broker step
@@ -411,7 +411,7 @@ class MT5Manager:
 
         # Check minimum volume
         if partial_volume < symbol_info.volume_min:
-            logger.error(f"❌ Partial volume {partial_volume} below minimum {symbol_info.volume_min}")
+            logger.error(f"Partial volume {partial_volume} below minimum {symbol_info.volume_min}")
             return False
 
         # Determine supported filling mode
@@ -442,14 +442,14 @@ class MT5Manager:
         result = mt5.order_send(request)
 
         if result is None:
-            logger.error(f"❌ Partial close order failed: {mt5.last_error()}")
+            logger.error(f"Partial close order failed: {mt5.last_error()}")
             return False
 
         if result.retcode != mt5.TRADE_RETCODE_DONE:
-            logger.error(f"❌ Partial close failed: {result.comment}")
+            logger.error(f"Partial close failed: {result.comment}")
             return False
 
-        logger.info(f"✅ Partial close successful: {ticket} - {partial_volume} lots")
+        logger.info(f"Partial close successful: {ticket} - {partial_volume} lots")
         return True
 
     def modify_position(
@@ -470,12 +470,12 @@ class MT5Manager:
             bool: True if modified successfully
         """
         if not self.connected:
-            logger.error("❌ Not connected to MT5")
+            logger.error("Not connected to MT5")
             return False
 
         position = mt5.positions_get(ticket=ticket)
         if not position:
-            logger.error(f"❌ Position {ticket} not found")
+            logger.error(f"Position {ticket} not found")
             return False
 
         position = position[0]
@@ -491,14 +491,14 @@ class MT5Manager:
         result = mt5.order_send(request)
 
         if result is None:
-            logger.error(f"❌ Modify failed: {mt5.last_error()}")
+            logger.error(f"Modify failed: {mt5.last_error()}")
             return False
 
         if result.retcode != mt5.TRADE_RETCODE_DONE:
-            logger.error(f"❌ Modify failed: {result.comment}")
+            logger.error(f"Modify failed: {result.comment}")
             return False
 
-        logger.info(f"✅ Position modified: {ticket}")
+        logger.info(f"Position modified: {ticket}")
         return True
 
     def _get_filling_mode(self, symbol_info) -> int:
@@ -534,7 +534,7 @@ class MT5Manager:
             return mt5.ORDER_FILLING_IOC
 
         # Absolute fallback - try RETURN
-        logger.warning(f"⚠️ No filling mode detected for {symbol_info.name}, defaulting to RETURN")
+        logger.warning(f"No filling mode detected for {symbol_info.name}, defaulting to RETURN")
         return mt5.ORDER_FILLING_RETURN
 
     def get_symbol_info(self, symbol: str) -> Optional[Dict]:

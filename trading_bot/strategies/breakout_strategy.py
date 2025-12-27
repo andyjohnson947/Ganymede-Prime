@@ -65,11 +65,11 @@ class BreakoutStrategy:
         """
         # DEBUG: Entry point logging
         from ..utils.logger import logger as debug_logger
-        debug_logger.info(f"   🔍 detect_range_breakout called: price={current_price:.5f}, vol={current_volume:.0f}, atr={atr:.5f}, data_len={len(data)}")
+        debug_logger.info(f"   detect_range_breakout called: price={current_price:.5f}, vol={current_volume:.0f}, atr={atr:.5f}, data_len={len(data)}")
 
         if len(data) < self.lookback:
             from ..utils.logger import logger as debug_logger
-            debug_logger.info(f"   ⚠️ BO skipped: Insufficient data ({len(data)} bars, need {self.lookback})")
+            debug_logger.info(f"   BO skipped: Insufficient data ({len(data)} bars, need {self.lookback})")
             return None
 
         # Calculate range boundaries
@@ -81,7 +81,7 @@ class BreakoutStrategy:
         # Check minimum range size
         if range_size_pips < self.min_range_pips:
             from ..utils.logger import logger as debug_logger
-            debug_logger.info(f"   ⚠️ BO skipped: Range too small ({range_size_pips:.1f} pips, need {self.min_range_pips})")
+            debug_logger.info(f"   BO skipped: Range too small ({range_size_pips:.1f} pips, need {self.min_range_pips})")
             return None
 
         # Calculate average volume - handle missing volume column
@@ -149,7 +149,7 @@ class BreakoutStrategy:
                 # DEBUG: Log why breakout rejected
                 from ..utils.logger import logger as debug_logger
                 debug_logger.info(
-                    f"   ❌ Breakout rejected: {direction}, ADX={adx:.1f}, Hurst={hurst:.3f}, "
+                    f"   Breakout rejected: {direction}, ADX={adx:.1f}, Hurst={hurst:.3f}, "
                     f"+DI={plus_di:.1f}, -DI={minus_di:.1f}, Confidence={confidence}"
                 )
                 return None  # Skip false breakout
@@ -165,7 +165,7 @@ class BreakoutStrategy:
             # DEBUG: Log successful breakout detection
             from ..utils.logger import logger as debug_logger
             debug_logger.info(
-                f"   ✅ Breakout FOUND: {direction}, Confidence={confidence}, ADX={adx:.1f}, "
+                f"   Breakout FOUND: {direction}, Confidence={confidence}, ADX={adx:.1f}, "
                 f"Hurst={hurst:.3f}, Range={range_size_pips:.1f} pips"
             )
 
@@ -185,6 +185,17 @@ class BreakoutStrategy:
                 'hurst': hurst,
                 'trend_confirmed': trend_confirmed
             }
+        else:
+            # No breakout detected or no volume spike
+            from ..utils.logger import logger as debug_logger
+            in_range = range_low <= current_price <= range_high
+            if in_range:
+                debug_logger.info(f"   BO skipped: Price in range [{range_low:.5f}-{range_high:.5f}], current={current_price:.5f}")
+            elif not volume_spike:
+                debug_logger.info(f"   BO skipped: No volume spike (current={current_volume:.0f}, avg={avg_volume:.0f}, need {self.volume_multiplier}x)")
+            else:
+                # Breakout occurred but volume not sufficient
+                debug_logger.info(f"   BO skipped: Breakout without volume (vol={current_volume:.0f}, need {avg_volume * self.volume_multiplier:.0f})")
 
         return None
 
@@ -462,6 +473,6 @@ if __name__ == '__main__':
     print(f"Mean Reversion Hours: {validation['mean_reversion_hours']}")
     print(f"Breakout Hours: {validation['breakout_hours']}")
     if validation['overlap_hours']:
-        print(f"⚠️  Warning: Overlapping hours: {validation['overlap_hours']}")
+        print(f" Warning: Overlapping hours: {validation['overlap_hours']}")
     print(f"Mean Reversion Days: {validation['mean_reversion_days']}")
     print(f"Breakout Days: {validation['breakout_days']}")

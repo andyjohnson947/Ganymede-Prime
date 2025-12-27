@@ -56,11 +56,13 @@ class SignalDetector:
         """
         # DEBUG: Entry point logging
         from ..utils.logger import logger as debug_logger
-        debug_logger.info(f"   🔍 Checking mean reversion signal for {symbol}...")
+        debug_logger.info(f"   Checking mean reversion signal for {symbol}...")
 
-        if len(current_data) < 200:
+        # Reduced from 200 to 100 bars for backtesting compatibility
+        # 100 H1 bars = ~4 days of data, sufficient for VWAP and volume profile
+        if len(current_data) < 100:
             from ..utils.logger import logger as debug_logger
-            debug_logger.info(f"   ⚠️ MR skipped: Insufficient data ({len(current_data)} bars, need 200)")
+            debug_logger.info(f"   MR skipped: Insufficient data ({len(current_data)} bars, need 100)")
             return None
 
         # Get current price
@@ -86,7 +88,7 @@ class SignalDetector:
         is_allowed, reason = calendar.is_trading_allowed(signal['timestamp'])
         if not is_allowed:
             from ..utils.logger import logger as debug_logger
-            debug_logger.info(f"   ⚠️ MR skipped: {reason}")
+            debug_logger.info(f"   MR skipped: {reason}")
             signal['should_trade'] = False
             signal['reject_reason'] = reason
             return None  # Don't trade during restricted periods
@@ -154,12 +156,12 @@ class SignalDetector:
         if signal['confluence_score'] > 0:  # Only log if we got any points
             if signal['should_trade']:
                 debug_logger.info(
-                    f"   ✅ Confluence PASSED: Score={signal['confluence_score']} (need {MIN_CONFLUENCE_SCORE}), "
+                    f"   Confluence PASSED: Score={signal['confluence_score']} (need {MIN_CONFLUENCE_SCORE}), "
                     f"Factors: {', '.join(signal['factors'])}"
                 )
             else:
                 debug_logger.info(
-                    f"   ❌ Score too low: {signal['confluence_score']}/{MIN_CONFLUENCE_SCORE} - "
+                    f"   Score too low: {signal['confluence_score']}/{MIN_CONFLUENCE_SCORE} - "
                     f"Factors: {', '.join(signal['factors']) if signal['factors'] else 'None'}"
                 )
 
@@ -307,7 +309,7 @@ class SignalDetector:
         strength = self.analyze_signal_strength(signal)
 
         summary = []
-        summary.append(f"🎯 Signal: {signal['direction'].upper()}")
+        summary.append(f"Signal: {signal['direction'].upper()}")
         summary.append(f"   Symbol: {signal['symbol']}")
         summary.append(f"   Price: {signal['price']:.5f}")
         summary.append(f"   Confluence Score: {signal['confluence_score']} ({strength})")

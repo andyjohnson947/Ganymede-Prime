@@ -108,7 +108,7 @@ def main():
     logger.info("     Timezone-Aware | Instrument-Specific Trading Windows")
     logger.info("=" * 80)
     logger.info("")
-    logger.info("🔄 Cache Status: CLEARED (Fresh imports enabled)")
+    logger.info("Cache Status: CLEARED (Fresh imports enabled)")
     logger.info("")
     logger.info("Strategy Parameters:")
     logger.info("  • Win Rate: 64.3%")
@@ -134,7 +134,7 @@ def main():
 
     # Validate credentials
     if not all([args.login, args.password, args.server]):
-        logger.error("❌ Error: MT5 credentials required")
+        logger.error("Error: MT5 credentials required")
         logger.info("   Use: --login LOGIN --password PASSWORD --server SERVER")
         logger.info("   Or use: --gui for graphical interface")
         sys.exit(1)
@@ -142,7 +142,7 @@ def main():
     # Get symbols
     symbols = args.symbols if args.symbols else SYMBOLS
     if not symbols:
-        logger.error("❌ Error: No symbols specified")
+        logger.error("Error: No symbols specified")
         logger.info("   Use: --symbols EURUSD GBPUSD")
         sys.exit(1)
 
@@ -166,7 +166,7 @@ def main():
         # Show test mode warning if enabled
         if args.test_mode:
             logger.info("\n" + "=" * 80)
-            logger.warning("⚠️  TEST MODE ENABLED - TRADING ALL DAY (NO TIME FILTERS)")
+            logger.warning(" TEST MODE ENABLED - TRADING ALL DAY (NO TIME FILTERS)")
             logger.info("=" * 80)
             logger.info("")
 
@@ -175,7 +175,7 @@ def main():
         strategy.start(symbols)
 
     except KeyboardInterrupt:
-        logger.info("\n\n⚠️  Interrupted by user")
+        logger.info("\n\n Interrupted by user")
     except Exception as e:
         logger.error(f"Fatal error: {e}")
         import traceback
@@ -203,7 +203,7 @@ def launch_gui(args):
         root.mainloop()
 
     except ImportError as e:
-        logger.error(f"❌ GUI dependencies not available: {e}")
+        logger.error(f"GUI dependencies not available: {e}")
         logger.info("   Install required packages:")
         logger.info("   pip install tkinter matplotlib")
         sys.exit(1)

@@ -85,13 +85,13 @@ class ConfluenceStrategy:
             symbols: List of symbols to trade
         """
         logger.info("=" * 80)
-        logger.info("🚀 CONFLUENCE STRATEGY STARTING")
+        logger.info("CONFLUENCE STRATEGY STARTING")
         logger.info("=" * 80)
 
         # Get account info
         account_info = self.mt5.get_account_info()
         if not account_info:
-            logger.error("❌ Failed to get account info")
+            logger.error("Failed to get account info")
             return
 
         logger.info(f"Account Balance: ${account_info['balance']:.2f}")
@@ -113,9 +113,9 @@ class ConfluenceStrategy:
                 time.sleep(LOOP_INTERVAL_SECONDS)
 
         except KeyboardInterrupt:
-            logger.warning("⚠️ Strategy stopped by user")
+            logger.warning("Strategy stopped by user")
         except Exception as e:
-            logger.error(f"❌ Strategy error: {e}")
+            logger.error(f"Strategy error: {e}")
             import traceback
             traceback.print_exc()
         finally:
@@ -125,7 +125,7 @@ class ConfluenceStrategy:
         """Stop the strategy"""
         self.running = False
         logger.info("=" * 80)
-        logger.info("📊 STRATEGY STATISTICS")
+        logger.info("STRATEGY STATISTICS")
         logger.info("=" * 80)
         for key, value in self.stats.items():
             logger.info(f"{key.replace('_', ' ').title()}: {value}")
@@ -161,7 +161,7 @@ class ConfluenceStrategy:
                     self._check_for_signals(symbol)
 
             except Exception as e:
-                logger.error(f"❌ Error processing {symbol}: {e}")
+                logger.error(f"Error processing {symbol}: {e}")
                 import traceback
                 traceback.print_exc()
                 continue
@@ -183,11 +183,11 @@ class ConfluenceStrategy:
         try:
             h1_data = self.mt5.get_historical_data(symbol, TIMEFRAME, bars=500)
             if h1_data is None:
-                logger.warning(f"⚠️ Failed to fetch H1 data for {symbol}")
+                logger.warning(f"Failed to fetch H1 data for {symbol}")
                 return
 
             if self.test_mode:
-                logger.debug(f"📊 Refreshed H1 data for {symbol}: {len(h1_data)} bars")
+                logger.debug(f"Refreshed H1 data for {symbol}: {len(h1_data)} bars")
 
             # Calculate VWAP on H1 data
             h1_data = self.signal_detector.vwap.calculate(h1_data)
@@ -206,11 +206,11 @@ class ConfluenceStrategy:
             w1_data = self.mt5.get_historical_data(symbol, 'W1', bars=50)
 
             if d1_data is None or w1_data is None:
-                logger.warning(f"⚠️ Failed to fetch HTF data for {symbol}")
+                logger.warning(f"Failed to fetch HTF data for {symbol}")
                 return
 
         except Exception as e:
-            logger.error(f"❌ Error fetching market data for {symbol}: {e}")
+            logger.error(f"Error fetching market data for {symbol}: {e}")
             import traceback
             traceback.print_exc()
             return
@@ -237,7 +237,7 @@ class ConfluenceStrategy:
                 for pos in positions:
                     if pos['profit'] < 0:
                         ticket = pos['ticket']
-                        logger.info(f"🚪 Closing negative position {ticket} - {action.reason}")
+                        logger.info(f"Closing negative position {ticket} - {action.reason}")
                         if self.mt5.close_position(ticket):
                             self.recovery_manager.untrack_position(ticket)
                             self.stats['trades_closed'] += 1
@@ -246,7 +246,7 @@ class ConfluenceStrategy:
             ticket = position['ticket']
             comment = position.get('comment', '')
 
-            # ⚠️ CRITICAL FIX: Don't track recovery orders as new positions
+            # CRITICAL FIX: Don't track recovery orders as new positions
             # Recovery orders have comments like "Grid L1 - 1001", "Hedge - 1001", "DCA L1 - 1001"
             # Only the ORIGINAL trade should spawn recovery, not recovery orders themselves
             is_recovery_order = any([
@@ -310,19 +310,19 @@ class ConfluenceStrategy:
                 if partial_action:
                     # Execute partial close
                     close_volume = partial_action['close_volume']
-                    logger.info(f"📉 Partial close: {ticket} - {partial_action['close_percent']}% at {partial_action['level_percent']}% to TP")
+                    logger.info(f"Partial close: {ticket} - {partial_action['close_percent']}% at {partial_action['level_percent']}% to TP")
 
                     # Check if close_volume equals or exceeds position volume (final close)
                     if close_volume >= position['volume']:
                         # Close entire position instead of partial
                         if self.mt5.close_position(ticket):
-                            logger.info(f"✅ Full close successful: {position['volume']} lots (final partial close)")
+                            logger.info(f"Full close successful: {position['volume']} lots (final partial close)")
                             self.recovery_manager.untrack_position(ticket)
                             self.stats['trades_closed'] += 1
                     else:
                         # Close partial volume
                         if self.mt5.close_partial_position(ticket, close_volume):
-                            logger.info(f"✅ Partial close successful: {close_volume} lots")
+                            logger.info(f"Partial close successful: {close_volume} lots")
 
             # RECOVERY & EXIT CONDITIONS: Only for tracked original positions
             if ticket in self.recovery_manager.tracked_positions:
@@ -374,7 +374,7 @@ class ConfluenceStrategy:
                 should_exit = self.signal_detector.check_exit_signal(position, h1_data)
 
                 if should_exit:
-                    logger.info(f"🎯 Exit signal detected for {ticket} - VWAP reversion")
+                    logger.info(f"Exit signal detected for {ticket} - VWAP reversion")
                     if self.mt5.close_position(ticket):
                         self.recovery_manager.untrack_position(ticket)
                         self.stats['trades_closed'] += 1
@@ -435,7 +435,7 @@ class ConfluenceStrategy:
         """
         if symbol not in self.market_data_cache:
             if self.test_mode:
-                logger.info(f"⚠️ No market data cached for {symbol}")
+                logger.info(f"No market data cached for {symbol}")
             return
 
         # Check if symbol is blacklisted (due to trending market)
@@ -446,7 +446,7 @@ class ConfluenceStrategy:
             else:
                 # Blacklist expired, remove it
                 del self.symbol_blacklist[symbol]
-                logger.info(f"✅ {symbol} blacklist expired - resuming trading")
+                logger.info(f"{symbol} blacklist expired - resuming trading")
 
         # Check if symbol is tradeable based on portfolio trading windows (bypass in test mode)
         if not self.test_mode and not self.portfolio_manager.is_symbol_tradeable(symbol):
@@ -472,12 +472,12 @@ class ConfluenceStrategy:
         market_regime = self._analyze_market_regime(h1_data)
 
         if self.test_mode:
-            logger.info(f"📊 {symbol}: Regime={market_regime['regime']}, MR={can_trade_mr}, BO={can_trade_bo}")
+            logger.info(f"{symbol}: Regime={market_regime['regime']}, MR={can_trade_mr}, BO={can_trade_bo}")
 
         # BIDIRECTIONAL ROUTING: Prioritize based on regime, fallback to opposite strategy
         if market_regime['regime'] == 'ranging_confirmed':
             # RANGING → TRENDING: Try MR first (optimal), fallback to BO
-            logger.debug(f"📊 {symbol}: Ranging confirmed - MR priority, BO fallback")
+            logger.debug(f"{symbol}: Ranging confirmed - MR priority, BO fallback")
 
             if can_trade_mr:
                 signal = self.signal_detector.detect_signal(h1_data, d1_data, w1_data, symbol)
@@ -491,7 +491,7 @@ class ConfluenceStrategy:
 
         elif market_regime['regime'] in ['trending_confirmed', 'strong_trending']:
             # TRENDING → RANGING: Try BO first (optimal), fallback to MR
-            logger.debug(f"📊 {symbol}: Trending confirmed - BO priority, MR fallback")
+            logger.debug(f"{symbol}: Trending confirmed - BO priority, MR fallback")
 
             if can_trade_bo and self.breakout_strategy:
                 signal = self._detect_breakout_signal(symbol, h1_data)
@@ -505,7 +505,7 @@ class ConfluenceStrategy:
 
         else:
             # UNCERTAIN REGIME: Try both (MR first by default)
-            logger.debug(f"📊 {symbol}: {market_regime['regime']} - trying both strategies")
+            logger.debug(f"{symbol}: {market_regime['regime']} - trying both strategies")
 
             if can_trade_mr:
                 signal = self.signal_detector.detect_signal(h1_data, d1_data, w1_data, symbol)
@@ -518,16 +518,16 @@ class ConfluenceStrategy:
 
         if signal is None:
             if self.test_mode:
-                logger.debug(f"❌ No signal detected for {symbol} (regime: {market_regime['regime']})")
+                logger.debug(f"No signal detected for {symbol} (regime: {market_regime['regime']})")
             return
 
         # Signal detected!
         self.stats['signals_detected'] += 1
 
         if self.test_mode:
-            logger.info(f"✅ SIGNAL DETECTED for {symbol}!")
+            logger.info(f"SIGNAL DETECTED for {symbol}!")
 
-        logger.info(f"🎯 Signal: {signal.get('strategy_type', 'unknown').upper()}")
+        logger.info(f"Signal: {signal.get('strategy_type', 'unknown').upper()}")
         logger.info(self.signal_detector.get_signal_summary(signal))
 
         # Log signal to specialized logger
@@ -549,7 +549,7 @@ class ConfluenceStrategy:
         """
         # DEBUG: Entry point logging
         if self.test_mode:
-            logger.info(f"   🔍 Checking breakout signal for {symbol}...")
+            logger.info(f"   Checking breakout signal for {symbol}...")
 
         # Get current price and volume
         latest_bar = h1_data.iloc[-1]
@@ -562,7 +562,7 @@ class ConfluenceStrategy:
             current_volume = latest_bar['tick_volume']
         else:
             current_volume = 0
-            logger.warning(f"⚠️ Warning: No volume data for {symbol}, using 0")
+            logger.warning(f"Warning: No volume data for {symbol}, using 0")
 
         # Calculate ATR
         atr = h1_data['atr'].iloc[-1] if 'atr' in h1_data.columns else 0
@@ -606,7 +606,7 @@ class ConfluenceStrategy:
         symbol_info = self.mt5.get_symbol_info(symbol)
 
         if not account_info or not symbol_info:
-            logger.error("❌ Failed to get account/symbol info")
+            logger.error("Failed to get account/symbol info")
             return
 
         # Calculate position size
@@ -623,7 +623,7 @@ class ConfluenceStrategy:
             volume = round(volume / volume_step) * volume_step
             # Ensure minimum volume
             volume = max(symbol_info.get('volume_min', 0.01), volume)
-            logger.info(f"📉 Breakout signal: Reducing lot size to {volume} (50% of base)")
+            logger.info(f"Breakout signal: Reducing lot size to {volume} (50% of base)")
 
         # Get current positions for validation
         positions = self.mt5.get_positions()
@@ -637,7 +637,7 @@ class ConfluenceStrategy:
         )
 
         if not can_trade:
-            logger.warning(f"❌ Trade validation failed: {reason}")
+            logger.warning(f"Trade validation failed: {reason}")
             return
 
         # Place order
@@ -654,7 +654,7 @@ class ConfluenceStrategy:
 
         if ticket:
             self.stats['trades_opened'] += 1
-            logger.info(f"✅ Trade opened: Ticket {ticket}")
+            logger.info(f"Trade opened: Ticket {ticket}")
 
             # Log trade to specialized logger
             logger.log_trade({
@@ -685,7 +685,7 @@ class ConfluenceStrategy:
             failed_ticket: Ticket of failed stack
         """
         if symbol not in self.market_data_cache:
-            logger.warning(f"⚠️ Cannot reassess {symbol} - no market data cached")
+            logger.warning(f"Cannot reassess {symbol} - no market data cached")
             return
 
         h1_data = self.market_data_cache[symbol]['h1']
@@ -707,7 +707,7 @@ class ConfluenceStrategy:
         market_analysis = combine_hurst_adx_analysis(hurst, adx, plus_di, minus_di)
 
         # Log market state
-        logger.warning(f"🔍 MARKET REASSESSMENT: {symbol} (after stack #{failed_ticket} killed)")
+        logger.warning(f"MARKET REASSESSMENT: {symbol} (after stack #{failed_ticket} killed)")
         logger.warning(f"   ADX: {adx:.1f} | Hurst: {hurst:.3f}")
         logger.warning(f"   Regime: {market_analysis['regime']}")
         logger.warning(f"   Candles: {candle_info['alignment']}")
@@ -717,12 +717,12 @@ class ConfluenceStrategy:
         is_trending = (adx > 30 and candle_info['aligned']) or market_analysis['danger_zone']
 
         if is_trending:
-            logger.critical(f"🚨 MARKET REGIME CHANGE DETECTED: {symbol}")
+            logger.critical(f"MARKET REGIME CHANGE DETECTED: {symbol}")
             logger.critical(f"   Market is TRENDING - Mean reversion UNSAFE!")
             logger.critical(f"   ADX: {adx:.1f} (TRENDING)")
             logger.critical(f"   Hurst: {hurst:.3f} ({market_analysis['hurst_behavior']})")
             logger.critical(f"   Candles: {candle_info['alignment']}")
-            logger.critical(f"   🛑 Closing ALL reversion trades for {symbol}")
+            logger.critical(f"   Closing ALL reversion trades for {symbol}")
 
             # Close all reversion trades for this symbol
             positions = self.mt5.get_positions()
@@ -733,24 +733,24 @@ class ConfluenceStrategy:
                 if pos['symbol'] == symbol and 'Confluence' in pos.get('comment', ''):
                     ticket = pos['ticket']
                     if self.mt5.close_position(ticket):
-                        logger.info(f"   ✅ Closed reversion trade #{ticket}")
+                        logger.info(f"   Closed reversion trade #{ticket}")
                         # Untrack if it's a tracked position
                         if ticket in self.recovery_manager.tracked_positions:
                             self.recovery_manager.untrack_position(ticket)
                         self.stats['trades_closed'] += 1
                         closed_count += 1
                     else:
-                        logger.error(f"   ❌ Failed to close #{ticket}")
+                        logger.error(f"   Failed to close #{ticket}")
 
             logger.critical(f"   Total closed: {closed_count} reversion trades")
 
             # Blacklist symbol for 30 minutes
             blacklist_until = get_current_time() + timedelta(minutes=30)
             self.symbol_blacklist[symbol] = blacklist_until
-            logger.warning(f"   ⛔ {symbol} blacklisted until {blacklist_until.strftime('%H:%M:%S')}")
+            logger.warning(f"   {symbol} blacklisted until {blacklist_until.strftime('%H:%M:%S')}")
 
         else:
-            logger.info(f"✅ Market regime acceptable for {symbol}")
+            logger.info(f"Market regime acceptable for {symbol}")
             logger.info(f"   Continuing normal operations")
 
     def _close_recovery_stack(self, original_ticket: int):
@@ -763,7 +763,7 @@ class ConfluenceStrategy:
         # Get all tickets in the stack
         stack_tickets = self.recovery_manager.get_all_stack_tickets(original_ticket)
 
-        logger.info(f"📦 Closing recovery stack for {original_ticket}")
+        logger.info(f"Closing recovery stack for {original_ticket}")
         logger.info(f"   Closing {len(stack_tickets)} positions...")
 
         closed_count = 0
@@ -771,14 +771,14 @@ class ConfluenceStrategy:
             if self.mt5.close_position(ticket):
                 closed_count += 1
                 self.stats['trades_closed'] += 1
-                logger.info(f"   ✅ Closed #{ticket}")
+                logger.info(f"   Closed #{ticket}")
             else:
-                logger.error(f"   ❌ Failed to close #{ticket}")
+                logger.error(f"   Failed to close #{ticket}")
 
         # Untrack the original position
         self.recovery_manager.untrack_position(original_ticket)
 
-        logger.info(f"📦 Stack closed: {closed_count}/{len(stack_tickets)} positions")
+        logger.info(f"Stack closed: {closed_count}/{len(stack_tickets)} positions")
 
     def _execute_recovery_action(self, action: Dict):
         """
@@ -861,14 +861,14 @@ class ConfluenceStrategy:
         Fixes Python caching issue where config changes require full restart
         """
         logger.info("=" * 60)
-        logger.info("🔄 RELOADING CONFIGURATION")
+        logger.info("RELOADING CONFIGURATION")
         logger.info("=" * 60)
         success = reload_config()
         if success:
             print_current_config()
-            logger.info("✅ Config reloaded successfully!")
+            logger.info("Config reloaded successfully!")
             logger.info("   Changes will take effect on next trading cycle")
         else:
-            logger.error("❌ Config reload failed")
+            logger.error("Config reload failed")
         logger.info("=" * 60)
         return success

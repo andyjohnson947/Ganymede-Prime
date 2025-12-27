@@ -344,7 +344,7 @@ class Backtester:
         print("BACKTEST SUMMARY")
         print("=" * 80)
 
-        print(f"\n📊 Performance:")
+        print(f"\nPerformance:")
         print(f"   Initial Balance:    ${stats['initial_balance']:>12,.2f}")
         print(f"   Final Balance:      ${stats['final_balance']:>12,.2f}")
         print(f"   Final Equity:       ${stats['final_equity']:>12,.2f}")
@@ -352,13 +352,13 @@ class Backtester:
         print(f"   Max Drawdown:       ${results['max_drawdown']:>12,.2f}")
         print(f"   Return:             {(stats['net_profit'] / stats['initial_balance'] * 100):>12.2f}%")
 
-        print(f"\n📈 Trading Activity:")
+        print(f"\nTrading Activity:")
         print(f"   Total Trades:       {stats['total_trades']:>12}")
         print(f"   Winning Trades:     {stats['winning_trades']:>12}")
         print(f"   Losing Trades:      {stats['losing_trades']:>12}")
         print(f"   Win Rate:           {stats['win_rate']:>12.2f}%")
 
-        print(f"\n💰 Profit Metrics:")
+        print(f"\nProfit Metrics:")
         print(f"   Total Profit:       ${stats['total_profit']:>12,.2f}")
         print(f"   Total Loss:         ${stats['total_loss']:>12,.2f}")
         print(f"   Profit Factor:      {stats['profit_factor']:>12.2f}")
@@ -368,7 +368,7 @@ class Backtester:
         for symbol, profit in results['profit_by_symbol'].items():
             print(f"   {symbol:>10}:       ${profit:>12,.2f}")
 
-        print(f"\n🎯 Profit by Strategy:")
+        print(f"\nProfit by Strategy:")
         for strategy, profit in results['profit_by_strategy'].items():
             print(f"   {strategy:>15}:   ${profit:>12,.2f}")
 

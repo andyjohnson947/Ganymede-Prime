@@ -349,7 +349,7 @@ class PerformanceAnalyzer:
         lines.append("=" * 100)
 
         # Basic statistics
-        lines.append("\n📊 BASIC STATISTICS")
+        lines.append("\nBASIC STATISTICS")
         lines.append("-" * 100)
         lines.append(f"Initial Balance:        ${self.stats['initial_balance']:>15,.2f}")
         lines.append(f"Final Balance:          ${self.stats['final_balance']:>15,.2f}")
@@ -361,7 +361,7 @@ class PerformanceAnalyzer:
         lines.append(f"Profit Factor:          {self.stats['profit_factor']:>15.2f}")
 
         # Risk metrics
-        lines.append("\n📉 RISK METRICS")
+        lines.append("\nRISK METRICS")
         lines.append("-" * 100)
         sharpe = self.calculate_sharpe_ratio()
         sortino = self.calculate_sortino_ratio()
@@ -380,7 +380,7 @@ class PerformanceAnalyzer:
 
         # Consecutive trades
         consec = self.analyze_consecutive_trades()
-        lines.append("\n🔄 CONSECUTIVE TRADES")
+        lines.append("\nCONSECUTIVE TRADES")
         lines.append("-" * 100)
         lines.append(f"Max Consecutive Wins:   {consec['max_consecutive_wins']:>15}")
         lines.append(f"Max Consecutive Losses: {consec['max_consecutive_losses']:>15}")
@@ -400,7 +400,7 @@ class PerformanceAnalyzer:
 
         # Performance by strategy
         strategy_stats = self.analyze_by_strategy()
-        lines.append("\n🎯 PERFORMANCE BY STRATEGY")
+        lines.append("\nPERFORMANCE BY STRATEGY")
         lines.append("-" * 100)
         for strategy, stats in strategy_stats.items():
             lines.append(

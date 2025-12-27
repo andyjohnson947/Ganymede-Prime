@@ -8,6 +8,7 @@ from typing import Dict, List, Optional
 from datetime import datetime
 
 from utils.timezone_manager import get_current_time
+from utils.logger import logger
 from portfolio.instruments_config import get_recovery_settings, get_take_profit_settings
 from config.strategy_config import (
     GRID_ENABLED,
@@ -236,9 +237,9 @@ class RecoveryManager:
             position['total_volume'] += grid_volume
             position['recovery_active'] = True
 
-            print(f"🔹 Grid Level {len(position['grid_levels'])} triggered for {ticket}")
-            print(f"   Entry: {entry_price:.5f} → Grid: {grid_price:.5f}")
-            print(f"   Distance: {grid_spacing * levels_added:.1f} pips")
+            logger.info(f"🔹 Grid Level {len(position['grid_levels'])} triggered for {ticket}")
+            logger.info(f"   Entry: {entry_price:.5f} → Grid: {grid_price:.5f}")
+            logger.info(f"   Distance: {grid_spacing * levels_added:.1f} pips")
 
             return {
                 'action': 'grid',
@@ -318,10 +319,10 @@ class RecoveryManager:
 
             position['recovery_active'] = True
 
-            print(f"🛡️ Hedge activated for {ticket}")
-            print(f"   Original: {position_type.upper()} {position['initial_volume']:.2f} (total exposure: {position['total_volume']:.2f})")
-            print(f"   Hedge: {hedge_type.upper()} {hedge_volume:.2f} (ratio: {HEDGE_RATIO}x on initial)")
-            print(f"   Triggered at: {pips_underwater:.1f} pips underwater")
+            logger.info(f"🛡️ Hedge activated for {ticket}")
+            logger.info(f"   Original: {position_type.upper()} {position['initial_volume']:.2f} (total exposure: {position['total_volume']:.2f})")
+            logger.info(f"   Hedge: {hedge_type.upper()} {hedge_volume:.2f} (ratio: {HEDGE_RATIO}x on initial)")
+            logger.info(f"   Triggered at: {pips_underwater:.1f} pips underwater")
 
             return {
                 'action': 'hedge',
@@ -406,10 +407,10 @@ class RecoveryManager:
             position['total_volume'] += dca_volume
             position['recovery_active'] = True
 
-            print(f"📊 DCA Level {len(position['dca_levels'])} triggered for {ticket}")
-            print(f"   Price: {current_price:.5f}")
-            print(f"   Volume: {dca_volume:.2f} (multiplier: {dca_multiplier}x)")
-            print(f"   Total volume now: {position['total_volume']:.2f}")
+            logger.info(f"📊 DCA Level {len(position['dca_levels'])} triggered for {ticket}")
+            logger.info(f"   Price: {current_price:.5f}")
+            logger.info(f"   Volume: {dca_volume:.2f} (multiplier: {dca_multiplier}x)")
+            logger.info(f"   Total volume now: {position['total_volume']:.2f}")
 
             return {
                 'action': 'dca',
@@ -620,9 +621,9 @@ class RecoveryManager:
         target_profit = account_balance * (profit_percent / 100.0)
 
         if net_profit >= target_profit:
-            print(f"✅ Profit target reached for {ticket}")
-            print(f"   Net profit: ${net_profit:.2f}")
-            print(f"   Target: ${target_profit:.2f} ({profit_percent}% of ${account_balance:.2f})")
+            logger.info(f"✅ Profit target reached for {ticket}")
+            logger.info(f"   Net profit: ${net_profit:.2f}")
+            logger.info(f"   Target: ${target_profit:.2f} ({profit_percent}% of ${account_balance:.2f})")
             return True
 
         return False
@@ -652,10 +653,10 @@ class RecoveryManager:
         hours_open = time_open.total_seconds() / 3600
 
         if hours_open >= hours_limit:
-            print(f"⏰ Time limit reached for {ticket}")
-            print(f"   Open for: {hours_open:.1f} hours")
-            print(f"   Limit: {hours_limit} hours")
-            print(f"   Auto-closing stuck position...")
+            logger.info(f"⏰ Time limit reached for {ticket}")
+            logger.info(f"   Open for: {hours_open:.1f} hours")
+            logger.info(f"   Limit: {hours_limit} hours")
+            logger.info(f"   Auto-closing stuck position...")
             return True
 
         return False
@@ -709,12 +710,12 @@ class RecoveryManager:
 
         # Check if we've exceeded drawdown threshold (net profit is negative and below threshold)
         if net_profit <= drawdown_threshold:
-            print(f"🛑 STACK DRAWDOWN EXCEEDED for {ticket}")
-            print(f"   Symbol: {symbol}")
-            print(f"   Expected profit: ${expected_profit:.2f}")
-            print(f"   Drawdown threshold: ${drawdown_threshold:.2f} ({STACK_DRAWDOWN_MULTIPLIER}x)")
-            print(f"   Current stack P&L: ${net_profit:.2f}")
-            print(f"   ⚠️  Killing entire recovery stack to limit losses")
+            logger.info(f"🛑 STACK DRAWDOWN EXCEEDED for {ticket}")
+            logger.info(f"   Symbol: {symbol}")
+            logger.info(f"   Expected profit: ${expected_profit:.2f}")
+            logger.info(f"   Drawdown threshold: ${drawdown_threshold:.2f} ({STACK_DRAWDOWN_MULTIPLIER}x)")
+            logger.info(f"   Current stack P&L: ${net_profit:.2f}")
+            logger.info(f"   ⚠️  Killing entire recovery stack to limit losses")
             return True
 
         return False

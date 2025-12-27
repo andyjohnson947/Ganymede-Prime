@@ -94,7 +94,8 @@ class MockMT5Manager:
         self,
         symbol: str,
         timeframe: str,
-        bars: int
+        bars: int = 1000,
+        start_date: Optional[datetime] = None
     ) -> Optional[pd.DataFrame]:
         """
         Get historical data up to current_time
@@ -103,6 +104,7 @@ class MockMT5Manager:
             symbol: Trading symbol
             timeframe: Timeframe (H1, D1, W1)
             bars: Number of bars to return
+            start_date: Optional start date (ignored in mock, uses current_time)
 
         Returns:
             DataFrame with OHLCV data or None
@@ -167,14 +169,23 @@ class MockMT5Manager:
             'margin_level': 0.0
         }
 
-    def get_positions(self) -> List[Dict]:
+    def get_positions(self, symbol: Optional[str] = None) -> List[Dict]:
         """
-        Get all open positions
+        Get open positions
+
+        Args:
+            symbol: Optional symbol to filter positions
 
         Returns:
             List of position dicts
         """
-        return list(self.positions.values())
+        positions = list(self.positions.values())
+
+        # Filter by symbol if provided
+        if symbol:
+            positions = [pos for pos in positions if pos['symbol'] == symbol]
+
+        return positions
 
     def place_order(
         self,

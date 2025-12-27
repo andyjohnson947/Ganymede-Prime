@@ -31,6 +31,8 @@ from config.strategy_config import (
     PARTIAL_CLOSE_RECOVERY,
     BREAKOUT_ENABLED,
     BREAKOUT_LOT_SIZE_MULTIPLIER,
+    LOOP_INTERVAL_SECONDS,
+    DEFAULT_TP_PIPS,
 )
 
 
@@ -106,7 +108,7 @@ class ConfluenceStrategy:
                 self._trading_loop(symbols)
 
                 # Sleep before next iteration
-                time.sleep(60)  # Check every minute
+                time.sleep(LOOP_INTERVAL_SECONDS)
 
         except KeyboardInterrupt:
             print("\n⚠️ Strategy stopped by user")
@@ -265,8 +267,8 @@ class ConfluenceStrategy:
                     entry_price = position['price_open']
                     pos_type = 'buy' if position['type'] == 0 else 'sell'
 
-                    # Estimate TP price (40 pips for EURUSD, adjust as needed)
-                    tp_distance = 40 * pip_value
+                    # Estimate TP price using default from config
+                    tp_distance = DEFAULT_TP_PIPS * pip_value
                     tp_price = entry_price + tp_distance if pos_type == 'buy' else entry_price - tp_distance
 
                     self.partial_close_manager.track_position(

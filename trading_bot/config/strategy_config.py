@@ -331,6 +331,11 @@ HISTORY_BARS = {
 # Data cache refresh interval (minutes)
 DATA_REFRESH_INTERVAL = 60
 
+# Main loop timing
+LOOP_INTERVAL_SECONDS = 60  # Check positions/signals every minute
+DEFAULT_TP_PIPS = 40  # Default TP distance when not specified
+VALUE_AREA_PERCENTAGE = 0.70  # Volume profile value area threshold
+
 # =============================================================================
 # LOGGING
 # =============================================================================

@@ -14,7 +14,8 @@ from config.strategy_config import (
     VP_BINS,
     HVN_LEVELS,
     LVN_LEVELS,
-    SWING_LOOKBACK
+    SWING_LOOKBACK,
+    VALUE_AREA_PERCENTAGE
 )
 
 
@@ -92,7 +93,7 @@ class VolumeProfile:
 
         # Calculate Value Area (70% of volume)
         total_volume = sum(volume_at_price.values())
-        target_volume = total_volume * 0.70
+        target_volume = total_volume * VALUE_AREA_PERCENTAGE
 
         # Start from POC and expand outward
         value_area_bins = {poc_bin}

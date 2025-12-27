@@ -29,8 +29,14 @@ from ..config.strategy_config import (
 class SignalDetector:
     """Detect entry signals based on confluence of multiple factors"""
 
-    def __init__(self):
-        """Initialize signal detector with indicators"""
+    def __init__(self, test_mode: bool = False):
+        """
+        Initialize signal detector with indicators
+
+        Args:
+            test_mode: If True, bypass trading calendar restrictions for backtesting
+        """
+        self.test_mode = test_mode
         self.vwap = VWAP()
         self.volume_profile = VolumeProfile()
         self.htf_levels = HTFLevels()
@@ -84,14 +90,16 @@ class SignalDetector:
         }
 
         # Check trading calendar restrictions (bank holidays, weekends, Friday afternoons)
-        calendar = get_trading_calendar()
-        is_allowed, reason = calendar.is_trading_allowed(signal['timestamp'])
-        if not is_allowed:
-            from ..utils.logger import logger as debug_logger
-            debug_logger.info(f"   MR skipped: {reason}")
-            signal['should_trade'] = False
-            signal['reject_reason'] = reason
-            return None  # Don't trade during restricted periods
+        # Bypass in test_mode for backtesting
+        if not self.test_mode:
+            calendar = get_trading_calendar()
+            is_allowed, reason = calendar.is_trading_allowed(signal['timestamp'])
+            if not is_allowed:
+                from ..utils.logger import logger as debug_logger
+                debug_logger.info(f"   MR skipped: {reason}")
+                signal['should_trade'] = False
+                signal['reject_reason'] = reason
+                return None  # Don't trade during restricted periods
 
         # Calculate indicators if not already done
         if 'vwap' not in current_data.columns:

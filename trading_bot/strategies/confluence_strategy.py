@@ -52,7 +52,7 @@ class ConfluenceStrategy:
         """
         self.mt5 = mt5_manager
         self.test_mode = test_mode
-        self.signal_detector = SignalDetector()
+        self.signal_detector = SignalDetector(test_mode=test_mode)
         self.recovery_manager = RecoveryManager()
         self.risk_calculator = RiskCalculator()
         self.portfolio_manager = PortfolioManager()

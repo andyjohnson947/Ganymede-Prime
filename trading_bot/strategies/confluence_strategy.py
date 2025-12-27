@@ -363,8 +363,60 @@ class ConfluenceStrategy:
                         self.recovery_manager.untrack_position(ticket)
                         self.stats['trades_closed'] += 1
 
+    def _analyze_market_regime(self, h1_data: pd.DataFrame) -> dict:
+        """
+        Analyze market regime once to avoid redundant calculations
+        Used to route signals intelligently and avoid calculating ADX/Hurst twice
+
+        Args:
+            h1_data: H1 timeframe data
+
+        Returns:
+            Dict with regime analysis (ADX, Hurst, regime, confidence, etc.)
+        """
+        # Calculate ADX for trend strength
+        data_with_adx = calculate_adx(h1_data.copy(), period=14)
+        if len(data_with_adx) > 0:
+            latest_adx = data_with_adx.iloc[-1]
+            adx = latest_adx['adx']
+            plus_di = latest_adx['plus_di']
+            minus_di = latest_adx['minus_di']
+        else:
+            adx = 0
+            plus_di = 0
+            minus_di = 0
+
+        # Calculate Hurst exponent for trend persistence
+        hurst = calculate_hurst_exponent(h1_data['close'].tail(100))
+
+        # Analyze candle direction
+        candle_info = analyze_candle_direction(h1_data, lookback=5)
+
+        # Combine ADX + Hurst for comprehensive regime detection
+        market_analysis = combine_hurst_adx_analysis(hurst, adx, plus_di, minus_di)
+
+        return {
+            'adx': adx,
+            'plus_di': plus_di,
+            'minus_di': minus_di,
+            'hurst': hurst,
+            'candle_alignment': candle_info['alignment'],
+            'candle_aligned': candle_info['aligned'],
+            'regime': market_analysis['regime'],
+            'strategy': market_analysis['strategy'],
+            'confidence': market_analysis['confidence'],
+            'should_mean_revert': market_analysis['should_mean_revert'],
+            'should_trend_follow': market_analysis['should_trend_follow'],
+            'danger_zone': market_analysis['danger_zone']
+        }
+
     def _check_for_signals(self, symbol: str):
-        """Check for new entry signals"""
+        """
+        Check for new entry signals with BIDIRECTIONAL regime-based routing
+
+        RANGING → TRENDING: MR rejected → Try BO
+        TRENDING → RANGING: BO rejected → Try MR
+        """
         if symbol not in self.market_data_cache:
             return
 
@@ -398,53 +450,50 @@ class ConfluenceStrategy:
             can_trade_mr = self.time_filter.can_trade_mean_reversion(current_time)
             can_trade_bo = self.time_filter.can_trade_breakout(current_time)
 
-        # Try mean reversion signal first (if allowed)
-        if can_trade_mr:
-            signal = self.signal_detector.detect_signal(
-                current_data=h1_data,
-                daily_data=d1_data,
-                weekly_data=w1_data,
-                symbol=symbol
-            )
-            if signal:
-                signal['strategy_type'] = 'mean_reversion'
+        # OPTIMIZATION: Analyze market regime ONCE (shared by both strategies)
+        market_regime = self._analyze_market_regime(h1_data)
 
-        # Try breakout signal (if mean reversion found nothing and breakout is allowed)
-        if signal is None and can_trade_bo and self.breakout_strategy:
-            # Get current price and volume
-            latest_bar = h1_data.iloc[-1]
-            current_price = latest_bar['close']
+        # BIDIRECTIONAL ROUTING: Prioritize based on regime, fallback to opposite strategy
+        if market_regime['regime'] == 'ranging_confirmed':
+            # RANGING → TRENDING: Try MR first (optimal), fallback to BO
+            logger.debug(f"📊 {symbol}: Ranging confirmed - MR priority, BO fallback")
 
-            # Get volume - handle both 'volume' and 'tick_volume' columns
-            if 'volume' in latest_bar:
-                current_volume = latest_bar['volume']
-            elif 'tick_volume' in latest_bar:
-                current_volume = latest_bar['tick_volume']
-            else:
-                current_volume = 0  # Default if no volume data
-                logger.warning(f"⚠️ Warning: No volume data for {symbol}, using 0")
+            if can_trade_mr:
+                signal = self.signal_detector.detect_signal(h1_data, d1_data, w1_data, symbol)
+                if signal:
+                    signal['strategy_type'] = 'mean_reversion'
+                    signal['regime'] = market_regime['regime']
 
-            # Calculate ATR
-            atr = h1_data['atr'].iloc[-1] if 'atr' in h1_data.columns else 0
+            # Fallback to breakout if MR found nothing
+            if signal is None and can_trade_bo and self.breakout_strategy:
+                signal = self._detect_breakout_signal(symbol, h1_data)
 
-            # Check for range breakout
-            breakout_signal = self.breakout_strategy.detect_range_breakout(
-                data=h1_data,
-                current_price=current_price,
-                current_volume=current_volume,
-                atr=atr
-            )
+        elif market_regime['regime'] in ['trending_confirmed', 'strong_trending']:
+            # TRENDING → RANGING: Try BO first (optimal), fallback to MR
+            logger.debug(f"📊 {symbol}: Trending confirmed - BO priority, MR fallback")
 
-            if breakout_signal:
-                # Convert breakout signal to standard signal format
-                signal = {
-                    'symbol': symbol,
-                    'direction': breakout_signal['direction'],
-                    'price': current_price,
-                    'strategy_type': 'breakout',
-                    'confluence_score': breakout_signal.get('score', 3),
-                    'factors': breakout_signal.get('factors', [])
-                }
+            if can_trade_bo and self.breakout_strategy:
+                signal = self._detect_breakout_signal(symbol, h1_data)
+
+            # Fallback to mean reversion if BO found nothing
+            if signal is None and can_trade_mr:
+                signal = self.signal_detector.detect_signal(h1_data, d1_data, w1_data, symbol)
+                if signal:
+                    signal['strategy_type'] = 'mean_reversion'
+                    signal['regime'] = market_regime['regime']
+
+        else:
+            # UNCERTAIN REGIME: Try both (MR first by default)
+            logger.debug(f"📊 {symbol}: {market_regime['regime']} - trying both strategies")
+
+            if can_trade_mr:
+                signal = self.signal_detector.detect_signal(h1_data, d1_data, w1_data, symbol)
+                if signal:
+                    signal['strategy_type'] = 'mean_reversion'
+                    signal['regime'] = market_regime['regime']
+
+            if signal is None and can_trade_bo and self.breakout_strategy:
+                signal = self._detect_breakout_signal(symbol, h1_data)
 
         if signal is None:
             return
@@ -460,6 +509,56 @@ class ConfluenceStrategy:
 
         # Execute trade
         self._execute_signal(signal)
+
+    def _detect_breakout_signal(self, symbol: str, h1_data: pd.DataFrame) -> Optional[Dict]:
+        """
+        Detect breakout signal (extracted for bidirectional routing)
+
+        Args:
+            symbol: Trading symbol
+            h1_data: H1 timeframe data
+
+        Returns:
+            Signal dict or None
+        """
+        # Get current price and volume
+        latest_bar = h1_data.iloc[-1]
+        current_price = latest_bar['close']
+
+        # Get volume - handle both 'volume' and 'tick_volume' columns
+        if 'volume' in latest_bar:
+            current_volume = latest_bar['volume']
+        elif 'tick_volume' in latest_bar:
+            current_volume = latest_bar['tick_volume']
+        else:
+            current_volume = 0
+            logger.warning(f"⚠️ Warning: No volume data for {symbol}, using 0")
+
+        # Calculate ATR
+        atr = h1_data['atr'].iloc[-1] if 'atr' in h1_data.columns else 0
+
+        # Check for range breakout
+        breakout_signal = self.breakout_strategy.detect_range_breakout(
+            data=h1_data,
+            current_price=current_price,
+            current_volume=current_volume,
+            atr=atr
+        )
+
+        if breakout_signal:
+            # Convert breakout signal to standard signal format
+            return {
+                'symbol': symbol,
+                'direction': breakout_signal['direction'],
+                'price': current_price,
+                'strategy_type': 'breakout',
+                'confluence_score': breakout_signal.get('score', 3),
+                'factors': breakout_signal.get('factors', []),
+                'confidence': breakout_signal.get('confidence', 'medium'),
+                'regime': 'breakout_detected'
+            }
+
+        return None
 
     def _execute_signal(self, signal: Dict):
         """

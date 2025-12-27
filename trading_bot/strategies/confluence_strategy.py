@@ -8,20 +8,20 @@ from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 import time
 
-from core.mt5_manager import MT5Manager
-from strategies.signal_detector import SignalDetector
-from strategies.recovery_manager import RecoveryManager
-from strategies.time_filters import TimeFilter
-from strategies.breakout_strategy import BreakoutStrategy
-from strategies.partial_close_manager import PartialCloseManager
-from utils.risk_calculator import RiskCalculator
-from utils.config_reloader import reload_config, print_current_config
-from utils.timezone_manager import get_current_time
-from utils.logger import logger
-from portfolio.portfolio_manager import PortfolioManager
-from indicators.adx import calculate_adx, analyze_candle_direction
-from indicators.hurst import calculate_hurst_exponent, combine_hurst_adx_analysis
-from config.strategy_config import (
+from ..core.mt5_manager import MT5Manager
+from .signal_detector import SignalDetector
+from .recovery_manager import RecoveryManager
+from .time_filters import TimeFilter
+from .breakout_strategy import BreakoutStrategy
+from .partial_close_manager import PartialCloseManager
+from ..utils.risk_calculator import RiskCalculator
+from ..utils.config_reloader import reload_config, print_current_config
+from ..utils.timezone_manager import get_current_time
+from ..utils.logger import logger
+from ..portfolio.portfolio_manager import PortfolioManager
+from ..indicators.adx import calculate_adx, analyze_candle_direction
+from ..indicators.hurst import calculate_hurst_exponent, combine_hurst_adx_analysis
+from ..config.strategy_config import (
     SYMBOLS,
     TIMEFRAME,
     HTF_TIMEFRAMES,

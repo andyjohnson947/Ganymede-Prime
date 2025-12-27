@@ -33,16 +33,16 @@ def clear_pycache():
 # Clear cache on startup
 clear_pycache()
 
-# Add parent directory to path
-sys.path.insert(0, str(Path(__file__).parent))
+# Add parent directory to path (so trading_bot can be imported as package)
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Disable Python bytecode generation (optional - prevents .pyc creation)
 sys.dont_write_bytecode = True
 
-from core.mt5_manager import MT5Manager
-from strategies.confluence_strategy import ConfluenceStrategy
-from utils.logger import logger
-from config.strategy_config import SYMBOLS
+from trading_bot.core.mt5_manager import MT5Manager
+from trading_bot.strategies.confluence_strategy import ConfluenceStrategy
+from trading_bot.utils.logger import logger
+from trading_bot.config.strategy_config import SYMBOLS
 
 
 def parse_arguments():
@@ -195,7 +195,7 @@ def launch_gui(args):
     """
     try:
         # Import GUI here to avoid dependency if not using GUI
-        from gui.trading_gui import TradingGUI
+        from trading_bot.gui.trading_gui import TradingGUI
         import tkinter as tk
 
         root = tk.Tk()

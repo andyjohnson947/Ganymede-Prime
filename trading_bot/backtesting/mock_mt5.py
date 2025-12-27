@@ -181,6 +181,7 @@ class MockMT5Manager:
             'profit': floating_pl,
             'margin': 0.0,  # Simplified for backtest
             'margin_free': self.equity,
+            'free_margin': self.equity,  # Alias for risk calculator compatibility
             'margin_level': 0.0
         }
 

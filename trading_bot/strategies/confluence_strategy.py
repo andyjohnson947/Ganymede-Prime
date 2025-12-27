@@ -17,6 +17,7 @@ from strategies.partial_close_manager import PartialCloseManager
 from utils.risk_calculator import RiskCalculator
 from utils.config_reloader import reload_config, print_current_config
 from utils.timezone_manager import get_current_time
+from utils.logger import logger
 from portfolio.portfolio_manager import PortfolioManager
 from config.strategy_config import (
     SYMBOLS,
@@ -80,22 +81,20 @@ class ConfluenceStrategy:
         Args:
             symbols: List of symbols to trade
         """
-        print("=" * 80)
-        print("🚀 CONFLUENCE STRATEGY STARTING")
-        print("=" * 80)
-        print()
+        logger.info("=" * 80)
+        logger.info("🚀 CONFLUENCE STRATEGY STARTING")
+        logger.info("=" * 80)
 
         # Get account info
         account_info = self.mt5.get_account_info()
         if not account_info:
-            print("❌ Failed to get account info")
+            logger.error("❌ Failed to get account info")
             return
 
-        print(f"Account Balance: ${account_info['balance']:.2f}")
-        print(f"Symbols: {', '.join(symbols)}")
-        print(f"Timeframe: {TIMEFRAME}")
-        print(f"HTF: {', '.join(HTF_TIMEFRAMES)}")
-        print()
+        logger.info(f"Account Balance: ${account_info['balance']:.2f}")
+        logger.info(f"Symbols: {', '.join(symbols)}")
+        logger.info(f"Timeframe: {TIMEFRAME}")
+        logger.info(f"HTF: {', '.join(HTF_TIMEFRAMES)}")
 
         # Set initial balance for drawdown tracking
         self.risk_calculator.set_initial_balance(account_info['balance'])
@@ -111,9 +110,9 @@ class ConfluenceStrategy:
                 time.sleep(LOOP_INTERVAL_SECONDS)
 
         except KeyboardInterrupt:
-            print("\n⚠️ Strategy stopped by user")
+            logger.warning("⚠️ Strategy stopped by user")
         except Exception as e:
-            print(f"\n❌ Strategy error: {e}")
+            logger.error(f"❌ Strategy error: {e}")
             import traceback
             traceback.print_exc()
         finally:
@@ -122,13 +121,11 @@ class ConfluenceStrategy:
     def stop(self):
         """Stop the strategy"""
         self.running = False
-        print()
-        print("=" * 80)
-        print("📊 STRATEGY STATISTICS")
-        print("=" * 80)
+        logger.info("=" * 80)
+        logger.info("📊 STRATEGY STATISTICS")
+        logger.info("=" * 80)
         for key, value in self.stats.items():
-            print(f"{key.replace('_', ' ').title()}: {value}")
-        print()
+            logger.info(f"{key.replace('_', ' ').title()}: {value}")
 
     def _trading_loop(self, symbols: List[str]):
         """
@@ -150,7 +147,7 @@ class ConfluenceStrategy:
                     self._check_for_signals(symbol)
 
             except Exception as e:
-                print(f"❌ Error processing {symbol}: {e}")
+                logger.error(f"❌ Error processing {symbol}: {e}")
                 import traceback
                 traceback.print_exc()
                 continue
@@ -170,7 +167,7 @@ class ConfluenceStrategy:
         try:
             h1_data = self.mt5.get_historical_data(symbol, TIMEFRAME, bars=500)
             if h1_data is None:
-                print(f"⚠️ Failed to fetch H1 data for {symbol}")
+                logger.warning(f"⚠️ Failed to fetch H1 data for {symbol}")
                 return
 
             # Calculate VWAP on H1 data
@@ -190,11 +187,11 @@ class ConfluenceStrategy:
             w1_data = self.mt5.get_historical_data(symbol, 'W1', bars=50)
 
             if d1_data is None or w1_data is None:
-                print(f"⚠️ Failed to fetch HTF data for {symbol}")
+                logger.warning(f"⚠️ Failed to fetch HTF data for {symbol}")
                 return
 
         except Exception as e:
-            print(f"❌ Error fetching market data for {symbol}: {e}")
+            logger.error(f"❌ Error fetching market data for {symbol}: {e}")
             import traceback
             traceback.print_exc()
             return
@@ -221,7 +218,7 @@ class ConfluenceStrategy:
                 for pos in positions:
                     if pos['profit'] < 0:
                         ticket = pos['ticket']
-                        print(f"🚪 Closing negative position {ticket} - {action.reason}")
+                        logger.info(f"🚪 Closing negative position {ticket} - {action.reason}")
                         if self.mt5.close_position(ticket):
                             self.recovery_manager.untrack_position(ticket)
                             self.stats['trades_closed'] += 1
@@ -294,19 +291,19 @@ class ConfluenceStrategy:
                 if partial_action:
                     # Execute partial close
                     close_volume = partial_action['close_volume']
-                    print(f"📉 Partial close: {ticket} - {partial_action['close_percent']}% at {partial_action['level_percent']}% to TP")
+                    logger.info(f"📉 Partial close: {ticket} - {partial_action['close_percent']}% at {partial_action['level_percent']}% to TP")
 
                     # Check if close_volume equals or exceeds position volume (final close)
                     if close_volume >= position['volume']:
                         # Close entire position instead of partial
                         if self.mt5.close_position(ticket):
-                            print(f"✅ Full close successful: {position['volume']} lots (final partial close)")
+                            logger.info(f"✅ Full close successful: {position['volume']} lots (final partial close)")
                             self.recovery_manager.untrack_position(ticket)
                             self.stats['trades_closed'] += 1
                     else:
                         # Close partial volume
                         if self.mt5.close_partial_position(ticket, close_volume):
-                            print(f"✅ Partial close successful: {close_volume} lots")
+                            logger.info(f"✅ Partial close successful: {close_volume} lots")
 
             # RECOVERY & EXIT CONDITIONS: Only for tracked original positions
             if ticket in self.recovery_manager.tracked_positions:
@@ -356,7 +353,7 @@ class ConfluenceStrategy:
                 should_exit = self.signal_detector.check_exit_signal(position, h1_data)
 
                 if should_exit:
-                    print(f"🎯 Exit signal detected for {ticket} - VWAP reversion")
+                    logger.info(f"🎯 Exit signal detected for {ticket} - VWAP reversion")
                     if self.mt5.close_position(ticket):
                         self.recovery_manager.untrack_position(ticket)
                         self.stats['trades_closed'] += 1
@@ -410,7 +407,7 @@ class ConfluenceStrategy:
                 current_volume = latest_bar['tick_volume']
             else:
                 current_volume = 0  # Default if no volume data
-                print(f"⚠️ Warning: No volume data for {symbol}, using 0")
+                logger.warning(f"⚠️ Warning: No volume data for {symbol}, using 0")
 
             # Calculate ATR
             atr = h1_data['atr'].iloc[-1] if 'atr' in h1_data.columns else 0
@@ -440,10 +437,11 @@ class ConfluenceStrategy:
         # Signal detected!
         self.stats['signals_detected'] += 1
 
-        print()
-        print(f"🎯 Signal: {signal.get('strategy_type', 'unknown').upper()}")
-        print(self.signal_detector.get_signal_summary(signal))
-        print()
+        logger.info(f"🎯 Signal: {signal.get('strategy_type', 'unknown').upper()}")
+        logger.info(self.signal_detector.get_signal_summary(signal))
+
+        # Log signal to specialized logger
+        logger.log_signal(signal)
 
         # Execute trade
         self._execute_signal(signal)
@@ -464,7 +462,7 @@ class ConfluenceStrategy:
         symbol_info = self.mt5.get_symbol_info(symbol)
 
         if not account_info or not symbol_info:
-            print("❌ Failed to get account/symbol info")
+            logger.error("❌ Failed to get account/symbol info")
             return
 
         # Calculate position size
@@ -481,7 +479,7 @@ class ConfluenceStrategy:
             volume = round(volume / volume_step) * volume_step
             # Ensure minimum volume
             volume = max(symbol_info.get('volume_min', 0.01), volume)
-            print(f"📉 Breakout signal: Reducing lot size to {volume} (50% of base)")
+            logger.info(f"📉 Breakout signal: Reducing lot size to {volume} (50% of base)")
 
         # Get current positions for validation
         positions = self.mt5.get_positions()
@@ -495,7 +493,7 @@ class ConfluenceStrategy:
         )
 
         if not can_trade:
-            print(f"❌ Trade validation failed: {reason}")
+            logger.warning(f"❌ Trade validation failed: {reason}")
             return
 
         # Place order
@@ -512,7 +510,17 @@ class ConfluenceStrategy:
 
         if ticket:
             self.stats['trades_opened'] += 1
-            print(f"✅ Trade opened: Ticket {ticket}")
+            logger.info(f"✅ Trade opened: Ticket {ticket}")
+
+            # Log trade to specialized logger
+            logger.log_trade({
+                'ticket': ticket,
+                'symbol': symbol,
+                'type': direction,
+                'volume': volume,
+                'price': price,
+                'comment': comment
+            })
 
             # Start tracking for recovery
             self.recovery_manager.track_position(
@@ -533,22 +541,22 @@ class ConfluenceStrategy:
         # Get all tickets in the stack
         stack_tickets = self.recovery_manager.get_all_stack_tickets(original_ticket)
 
-        print(f"📦 Closing recovery stack for {original_ticket}")
-        print(f"   Closing {len(stack_tickets)} positions...")
+        logger.info(f"📦 Closing recovery stack for {original_ticket}")
+        logger.info(f"   Closing {len(stack_tickets)} positions...")
 
         closed_count = 0
         for ticket in stack_tickets:
             if self.mt5.close_position(ticket):
                 closed_count += 1
                 self.stats['trades_closed'] += 1
-                print(f"   ✅ Closed #{ticket}")
+                logger.info(f"   ✅ Closed #{ticket}")
             else:
-                print(f"   ❌ Failed to close #{ticket}")
+                logger.error(f"   ❌ Failed to close #{ticket}")
 
         # Untrack the original position
         self.recovery_manager.untrack_position(original_ticket)
 
-        print(f"📦 Stack closed: {closed_count}/{len(stack_tickets)} positions")
+        logger.info(f"📦 Stack closed: {closed_count}/{len(stack_tickets)} positions")
 
     def _execute_recovery_action(self, action: Dict):
         """
@@ -630,17 +638,15 @@ class ConfluenceStrategy:
         Reload configuration from strategy_config.py without restarting bot
         Fixes Python caching issue where config changes require full restart
         """
-        print()
-        print("=" * 60)
-        print("🔄 RELOADING CONFIGURATION")
-        print("=" * 60)
+        logger.info("=" * 60)
+        logger.info("🔄 RELOADING CONFIGURATION")
+        logger.info("=" * 60)
         success = reload_config()
         if success:
             print_current_config()
-            print("✅ Config reloaded successfully!")
-            print("   Changes will take effect on next trading cycle")
+            logger.info("✅ Config reloaded successfully!")
+            logger.info("   Changes will take effect on next trading cycle")
         else:
-            print("❌ Config reload failed")
-        print("=" * 60)
-        print()
+            logger.error("❌ Config reload failed")
+        logger.info("=" * 60)
         return success

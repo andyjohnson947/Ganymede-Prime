@@ -13,6 +13,7 @@ from indicators.vwap import VWAP
 from indicators.volume_profile import VolumeProfile
 from indicators.htf_levels import HTFLevels
 from indicators.adx import calculate_adx, should_trade_based_on_trend
+from indicators.hurst import calculate_hurst_exponent, combine_hurst_adx_analysis
 from config.strategy_config import (
     MIN_CONFLUENCE_SCORE,
     CONFLUENCE_WEIGHTS,
@@ -142,13 +143,19 @@ class SignalDetector:
 
         # 5. Apply trend filter (if enabled)
         if signal['should_trade'] and TREND_FILTER_ENABLED:
-            # Calculate ADX
+            # Calculate ADX for trend strength
             data_with_adx = calculate_adx(current_data.copy(), period=ADX_PERIOD)
             latest_adx = data_with_adx.iloc[-1]
 
             adx_value = latest_adx['adx']
             plus_di = latest_adx['plus_di']
             minus_di = latest_adx['minus_di']
+
+            # Calculate Hurst exponent for trend persistence
+            hurst = calculate_hurst_exponent(current_data['close'].tail(100))
+
+            # Combine ADX + Hurst for comprehensive regime detection
+            market_analysis = combine_hurst_adx_analysis(hurst, adx_value, plus_di, minus_di)
 
             # Check if we should trade based on trend analysis
             should_trade, trend_reason = should_trade_based_on_trend(
@@ -161,10 +168,25 @@ class SignalDetector:
                 allow_weak_trends=ALLOW_WEAK_TRENDS
             )
 
+            # ENHANCED: Block mean reversion if Hurst shows trending behavior
+            # Even if ADX allows it, Hurst > 0.6 means strong trend persistence
+            if hurst > 0.6:
+                should_trade = False
+                trend_reason = f"Hurst {hurst:.3f} indicates strong trending persistence - Mean reversion unsafe"
+
+            # DANGER ZONE: Conflicting signals (mean-reverting Hurst but trending ADX)
+            elif market_analysis['danger_zone']:
+                should_trade = False
+                trend_reason = f"Conflicting signals: Hurst {hurst:.3f} (mean-reverting) but ADX {adx_value:.1f} (trending) - High risk"
+
             signal['trend_filter'] = {
                 'adx': adx_value,
                 'plus_di': plus_di,
                 'minus_di': minus_di,
+                'hurst': hurst,
+                'regime': market_analysis['regime'],
+                'strategy': market_analysis['strategy'],
+                'confidence': market_analysis['confidence'],
                 'passed': should_trade,
                 'reason': trend_reason
             }

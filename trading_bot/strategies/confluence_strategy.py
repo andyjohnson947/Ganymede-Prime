@@ -5,7 +5,7 @@ Orchestrates signal detection, position management, and recovery
 
 import pandas as pd
 from typing import Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 import time
 
 from core.mt5_manager import MT5Manager
@@ -19,6 +19,8 @@ from utils.config_reloader import reload_config, print_current_config
 from utils.timezone_manager import get_current_time
 from utils.logger import logger
 from portfolio.portfolio_manager import PortfolioManager
+from indicators.adx import calculate_adx, analyze_candle_direction
+from indicators.hurst import calculate_hurst_exponent, combine_hurst_adx_analysis
 from config.strategy_config import (
     SYMBOLS,
     TIMEFRAME,
@@ -63,6 +65,7 @@ class ConfluenceStrategy:
         self.running = False
         self.last_data_refresh = {}
         self.market_data_cache = {}
+        self.symbol_blacklist = {}  # Track temporarily blacklisted symbols
 
         # Statistics
         self.stats = {
@@ -329,6 +332,8 @@ class ConfluenceStrategy:
                     mt5_positions=all_positions,
                     pip_value=pip_value
                 ):
+                    # CRITICAL: Reassess market before closing - may need to close ALL reversion trades
+                    self._reassess_market_on_stack_kill(symbol, ticket)
                     self._close_recovery_stack(ticket)
                     continue
 
@@ -362,6 +367,16 @@ class ConfluenceStrategy:
         """Check for new entry signals"""
         if symbol not in self.market_data_cache:
             return
+
+        # Check if symbol is blacklisted (due to trending market)
+        if symbol in self.symbol_blacklist:
+            blacklist_until = self.symbol_blacklist[symbol]
+            if get_current_time() < blacklist_until:
+                return  # Still blacklisted
+            else:
+                # Blacklist expired, remove it
+                del self.symbol_blacklist[symbol]
+                logger.info(f"✅ {symbol} blacklist expired - resuming trading")
 
         # Check if symbol is tradeable based on portfolio trading windows (bypass in test mode)
         if not self.test_mode and not self.portfolio_manager.is_symbol_tradeable(symbol):
@@ -530,6 +545,84 @@ class ConfluenceStrategy:
                 position_type=direction,
                 volume=volume
             )
+
+    def _reassess_market_on_stack_kill(self, symbol: str, failed_ticket: int):
+        """
+        Reassess market conditions after stack failure
+        If market turned trending, close all reversion trades and blacklist symbol
+
+        Args:
+            symbol: Trading symbol
+            failed_ticket: Ticket of failed stack
+        """
+        if symbol not in self.market_data_cache:
+            logger.warning(f"⚠️ Cannot reassess {symbol} - no market data cached")
+            return
+
+        h1_data = self.market_data_cache[symbol]['h1']
+
+        # Calculate ADX for trend strength
+        data_with_adx = calculate_adx(h1_data.copy(), period=14)
+        latest_adx = data_with_adx.iloc[-1]
+        adx = latest_adx['adx']
+        plus_di = latest_adx['plus_di']
+        minus_di = latest_adx['minus_di']
+
+        # Calculate Hurst exponent for trend persistence
+        hurst = calculate_hurst_exponent(h1_data['close'].tail(100))
+
+        # Analyze candle direction
+        candle_info = analyze_candle_direction(h1_data, lookback=5)
+
+        # Combine Hurst + ADX analysis
+        market_analysis = combine_hurst_adx_analysis(hurst, adx, plus_di, minus_di)
+
+        # Log market state
+        logger.warning(f"🔍 MARKET REASSESSMENT: {symbol} (after stack #{failed_ticket} killed)")
+        logger.warning(f"   ADX: {adx:.1f} | Hurst: {hurst:.3f}")
+        logger.warning(f"   Regime: {market_analysis['regime']}")
+        logger.warning(f"   Candles: {candle_info['alignment']}")
+        logger.warning(f"   Recommendation: {market_analysis['strategy']}")
+
+        # CRITICAL: Check if market is now trending (dangerous for mean reversion)
+        is_trending = (adx > 30 and candle_info['aligned']) or market_analysis['danger_zone']
+
+        if is_trending:
+            logger.critical(f"🚨 MARKET REGIME CHANGE DETECTED: {symbol}")
+            logger.critical(f"   Market is TRENDING - Mean reversion UNSAFE!")
+            logger.critical(f"   ADX: {adx:.1f} (TRENDING)")
+            logger.critical(f"   Hurst: {hurst:.3f} ({market_analysis['hurst_behavior']})")
+            logger.critical(f"   Candles: {candle_info['alignment']}")
+            logger.critical(f"   🛑 Closing ALL reversion trades for {symbol}")
+
+            # Close all reversion trades for this symbol
+            positions = self.mt5.get_positions()
+            closed_count = 0
+
+            for pos in positions:
+                # Only close reversion trades (Confluence comment), not breakout trades
+                if pos['symbol'] == symbol and 'Confluence' in pos.get('comment', ''):
+                    ticket = pos['ticket']
+                    if self.mt5.close_position(ticket):
+                        logger.info(f"   ✅ Closed reversion trade #{ticket}")
+                        # Untrack if it's a tracked position
+                        if ticket in self.recovery_manager.tracked_positions:
+                            self.recovery_manager.untrack_position(ticket)
+                        self.stats['trades_closed'] += 1
+                        closed_count += 1
+                    else:
+                        logger.error(f"   ❌ Failed to close #{ticket}")
+
+            logger.critical(f"   Total closed: {closed_count} reversion trades")
+
+            # Blacklist symbol for 30 minutes
+            blacklist_until = get_current_time() + timedelta(minutes=30)
+            self.symbol_blacklist[symbol] = blacklist_until
+            logger.warning(f"   ⛔ {symbol} blacklisted until {blacklist_until.strftime('%H:%M:%S')}")
+
+        else:
+            logger.info(f"✅ Market regime acceptable for {symbol}")
+            logger.info(f"   Continuing normal operations")
 
     def _close_recovery_stack(self, original_ticket: int):
         """

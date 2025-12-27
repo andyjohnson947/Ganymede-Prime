@@ -102,30 +102,30 @@ def main():
     args = parse_arguments()
 
     # Print banner
-    print()
-    print("=" * 80)
-    print("     CONFLUENCE TRADING BOT - UPGRADED")
-    print("     Timezone-Aware | Instrument-Specific Trading Windows")
-    print("=" * 80)
-    print()
-    print("🔄 Cache Status: CLEARED (Fresh imports enabled)")
-    print()
-    print("Strategy Parameters:")
-    print("  • Win Rate: 64.3%")
-    print("  • Minimum Confluence Score: 4")
-    print("  • Base Lot Size: 0.04 (updated)")
-    print("  • Grid Spacing: 8 pips")
-    print("  • Hedge Trigger: 8 pips (5x ratio)")
-    print()
-    print("NEW FEATURES:")
-    print("  ✓ Timezone: GMT/GMT+1 with automatic DST handling")
-    print("  ✓ Trading Windows: Instrument-specific entry/exit times")
-    print("  ✓ Restrictions: No bank holidays, weekends, Friday afternoons")
-    print("  ✓ Auto-close negative positions at window end")
-    print("  ✓ Auto cache clearing: Code changes always picked up")
-    print()
-    print("=" * 80)
-    print()
+    logger.info()
+    logger.info("=" * 80)
+    logger.info("     CONFLUENCE TRADING BOT - UPGRADED")
+    logger.info("     Timezone-Aware | Instrument-Specific Trading Windows")
+    logger.info("=" * 80)
+    logger.info()
+    logger.info("🔄 Cache Status: CLEARED (Fresh imports enabled)")
+    logger.info()
+    logger.info("Strategy Parameters:")
+    logger.info("  • Win Rate: 64.3%")
+    logger.info("  • Minimum Confluence Score: 4")
+    logger.info("  • Base Lot Size: 0.04 (updated)")
+    logger.info("  • Grid Spacing: 8 pips")
+    logger.info("  • Hedge Trigger: 8 pips (5x ratio)")
+    logger.info()
+    logger.info("NEW FEATURES:")
+    logger.info("  ✓ Timezone: GMT/GMT+1 with automatic DST handling")
+    logger.info("  ✓ Trading Windows: Instrument-specific entry/exit times")
+    logger.info("  ✓ Restrictions: No bank holidays, weekends, Friday afternoons")
+    logger.info("  ✓ Auto-close negative positions at window end")
+    logger.info("  ✓ Auto cache clearing: Code changes always picked up")
+    logger.info()
+    logger.info("=" * 80)
+    logger.info()
 
     # Check if GUI mode
     if args.gui:
@@ -134,16 +134,16 @@ def main():
 
     # Validate credentials
     if not all([args.login, args.password, args.server]):
-        print("❌ Error: MT5 credentials required")
-        print("   Use: --login LOGIN --password PASSWORD --server SERVER")
-        print("   Or use: --gui for graphical interface")
+        logger.error("❌ Error: MT5 credentials required")
+        logger.info("   Use: --login LOGIN --password PASSWORD --server SERVER")
+        logger.info("   Or use: --gui for graphical interface")
         sys.exit(1)
 
     # Get symbols
     symbols = args.symbols if args.symbols else SYMBOLS
     if not symbols:
-        print("❌ Error: No symbols specified")
-        print("   Use: --symbols EURUSD GBPUSD")
+        logger.error("❌ Error: No symbols specified")
+        logger.info("   Use: --symbols EURUSD GBPUSD")
         sys.exit(1)
 
     # Connect to MT5
@@ -165,17 +165,17 @@ def main():
 
         # Show test mode warning if enabled
         if args.test_mode:
-            print("\n" + "=" * 80)
-            print("⚠️  TEST MODE ENABLED - TRADING ALL DAY (NO TIME FILTERS)")
-            print("=" * 80)
-            print()
+            logger.info("\n" + "=" * 80)
+            logger.warning("⚠️  TEST MODE ENABLED - TRADING ALL DAY (NO TIME FILTERS)")
+            logger.info("=" * 80)
+            logger.info()
 
         # Start trading
         logger.info(f"Starting strategy with symbols: {symbols}")
         strategy.start(symbols)
 
     except KeyboardInterrupt:
-        print("\n\n⚠️  Interrupted by user")
+        logger.info("\n\n⚠️  Interrupted by user")
     except Exception as e:
         logger.error(f"Fatal error: {e}")
         import traceback
@@ -203,9 +203,9 @@ def launch_gui(args):
         root.mainloop()
 
     except ImportError as e:
-        print(f"❌ GUI dependencies not available: {e}")
-        print("   Install required packages:")
-        print("   pip install tkinter matplotlib")
+        logger.error(f"❌ GUI dependencies not available: {e}")
+        logger.info("   Install required packages:")
+        logger.info("   pip install tkinter matplotlib")
         sys.exit(1)
 
 

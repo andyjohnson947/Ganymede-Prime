@@ -8,6 +8,7 @@ import numpy as np
 from typing import Tuple, Dict
 
 from config.strategy_config import VWAP_PERIOD, VWAP_BAND_MULTIPLIERS
+from utils.volume_utils import ensure_volume_column
 
 
 class VWAP:
@@ -38,12 +39,7 @@ class VWAP:
         df['typical_price'] = (df['high'] + df['low'] + df['close']) / 3
 
         # Ensure volume column exists (handle MT5's tick_volume)
-        if 'volume' not in df.columns:
-            if 'tick_volume' in df.columns:
-                df['volume'] = df['tick_volume']
-            else:
-                print("⚠️ Warning: No volume data for VWAP, using equal-weighted average")
-                df['volume'] = 1  # Fallback to equal-weighted if no volume
+        df = ensure_volume_column(df, default_value=1.0)
 
         # Volume-weighted typical price
         df['vwtp'] = df['typical_price'] * df['volume']

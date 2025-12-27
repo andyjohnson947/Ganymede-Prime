@@ -9,6 +9,8 @@ from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 from config import strategy_config as cfg
 
+from utils.volume_utils import get_volume_from_dataframe
+
 
 class BreakoutStrategy:
     """
@@ -73,12 +75,8 @@ class BreakoutStrategy:
             return None
 
         # Calculate average volume - handle missing volume column
-        if 'volume' in recent_data.columns:
-            avg_volume = recent_data['volume'].mean()
-        elif 'tick_volume' in recent_data.columns:
-            avg_volume = recent_data['tick_volume'].mean()
-        else:
-            avg_volume = current_volume  # Fallback to current volume
+        volume_series = get_volume_from_dataframe(recent_data, default_value=current_volume)
+        avg_volume = volume_series.mean()
         volume_spike = current_volume > (avg_volume * self.volume_multiplier)
 
         # Check for volatility compression (ATR decreasing)

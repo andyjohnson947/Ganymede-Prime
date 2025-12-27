@@ -8,6 +8,8 @@ import pandas as pd
 import numpy as np
 from typing import Dict, List, Tuple
 
+from utils.volume_utils import get_volume_from_row
+
 from config.strategy_config import (
     VP_BINS,
     HVN_LEVELS,
@@ -67,12 +69,7 @@ class VolumeProfile:
             candle_high = row['high']
 
             # Get volume - handle both 'volume' and 'tick_volume' columns
-            if 'volume' in row:
-                candle_volume = row['volume']
-            elif 'tick_volume' in row:
-                candle_volume = row['tick_volume']
-            else:
-                candle_volume = 1  # Default if no volume data
+            candle_volume = get_volume_from_row(row, default_value=1.0)
 
             # Find bins that overlap with this candle
             bin_indices = np.where((bins >= candle_low) & (bins <= candle_high))[0]

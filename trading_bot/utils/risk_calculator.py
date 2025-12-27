@@ -9,7 +9,7 @@ Based on discovered parameters:
 from typing import Dict, Optional, List
 from datetime import datetime
 
-from ...config.strategy_config import (
+from ..config.strategy_config import (
     BASE_LOT_SIZE,
     RISK_PERCENT,
     USE_FIXED_LOT_SIZE,

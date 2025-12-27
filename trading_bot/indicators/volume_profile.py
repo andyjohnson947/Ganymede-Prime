@@ -8,9 +8,9 @@ import pandas as pd
 import numpy as np
 from typing import Dict, List, Tuple
 
-from ...utils.volume_utils import get_volume_from_row
+from ..utils.volume_utils import get_volume_from_row
 
-from ...config.strategy_config import (
+from ..config.strategy_config import (
     VP_BINS,
     HVN_LEVELS,
     LVN_LEVELS,

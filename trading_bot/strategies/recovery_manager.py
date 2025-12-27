@@ -7,10 +7,10 @@ All discovered from EA analysis of 428 trades
 from typing import Dict, List, Optional
 from datetime import datetime
 
-from utils.timezone_manager import get_current_time
-from utils.logger import logger
-from portfolio.instruments_config import get_recovery_settings, get_take_profit_settings
-from config.strategy_config import (
+from ..utils.timezone_manager import get_current_time
+from ..utils.logger import logger
+from ..portfolio.instruments_config import get_recovery_settings, get_take_profit_settings
+from ..config.strategy_config import (
     GRID_ENABLED,
     GRID_SPACING_PIPS,      # Fallback default
     MAX_GRID_LEVELS,        # Fallback default

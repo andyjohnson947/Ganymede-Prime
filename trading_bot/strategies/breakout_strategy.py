@@ -7,11 +7,11 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
-from config import strategy_config as cfg
+from ..config import strategy_config as cfg
 
-from utils.volume_utils import get_volume_from_dataframe
-from indicators.adx import calculate_adx
-from indicators.hurst import calculate_hurst_exponent
+from ..utils.volume_utils import get_volume_from_dataframe
+from ..indicators.adx import calculate_adx
+from ..indicators.hurst import calculate_hurst_exponent
 
 
 class BreakoutStrategy:

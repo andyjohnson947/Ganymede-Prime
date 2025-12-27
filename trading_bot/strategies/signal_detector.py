@@ -141,6 +141,20 @@ class SignalDetector:
         # 4. Determine if we should trade based on confluence
         signal['should_trade'] = signal['confluence_score'] >= MIN_CONFLUENCE_SCORE
 
+        # DEBUG: Log confluence scoring (helps diagnose why no signals)
+        from ..utils.logger import logger as debug_logger
+        if signal['confluence_score'] > 0:  # Only log if we got any points
+            if signal['should_trade']:
+                debug_logger.info(
+                    f"   ✅ Confluence PASSED: Score={signal['confluence_score']} (need {MIN_CONFLUENCE_SCORE}), "
+                    f"Factors: {', '.join(signal['factors'])}"
+                )
+            else:
+                debug_logger.info(
+                    f"   ❌ Score too low: {signal['confluence_score']}/{MIN_CONFLUENCE_SCORE} - "
+                    f"Factors: {', '.join(signal['factors']) if signal['factors'] else 'None'}"
+                )
+
         # 5. Apply trend filter (if enabled)
         if signal['should_trade'] and TREND_FILTER_ENABLED:
             # Calculate ADX for trend strength

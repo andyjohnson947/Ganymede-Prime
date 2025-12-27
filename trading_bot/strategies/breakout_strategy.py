@@ -138,6 +138,12 @@ class BreakoutStrategy:
 
             # Only take breakout if trend confirmed OR volume compression is very strong
             if not trend_confirmed and not (is_compressed and volume_spike):
+                # DEBUG: Log why breakout rejected
+                from ..utils.logger import logger as debug_logger
+                debug_logger.info(
+                    f"   ❌ Breakout rejected: {direction}, ADX={adx:.1f}, Hurst={hurst:.3f}, "
+                    f"+DI={plus_di:.1f}, -DI={minus_di:.1f}, Confidence={confidence}"
+                )
                 return None  # Skip false breakout
 
             # Calculate targets and stops
@@ -147,6 +153,13 @@ class BreakoutStrategy:
             else:
                 target = current_price - (range_high - range_low)
                 stop = range_low + (range_high - range_low) * cfg.BREAKOUT_STOP_PERCENT
+
+            # DEBUG: Log successful breakout detection
+            from ..utils.logger import logger as debug_logger
+            debug_logger.info(
+                f"   ✅ Breakout FOUND: {direction}, Confidence={confidence}, ADX={adx:.1f}, "
+                f"Hurst={hurst:.3f}, Range={range_size_pips:.1f} pips"
+            )
 
             return {
                 'type': 'range_breakout',

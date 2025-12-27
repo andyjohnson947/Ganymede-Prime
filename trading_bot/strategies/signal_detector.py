@@ -55,6 +55,8 @@ class SignalDetector:
             Dict with signal info or None if no signal
         """
         if len(current_data) < 200:
+            from ..utils.logger import logger as debug_logger
+            debug_logger.info(f"   ⚠️ MR skipped: Insufficient data ({len(current_data)} bars, need 200)")
             return None
 
         # Get current price
@@ -79,6 +81,8 @@ class SignalDetector:
         calendar = get_trading_calendar()
         is_allowed, reason = calendar.is_trading_allowed(signal['timestamp'])
         if not is_allowed:
+            from ..utils.logger import logger as debug_logger
+            debug_logger.info(f"   ⚠️ MR skipped: {reason}")
             signal['should_trade'] = False
             signal['reject_reason'] = reason
             return None  # Don't trade during restricted periods

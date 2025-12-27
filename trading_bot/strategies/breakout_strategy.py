@@ -64,6 +64,8 @@ class BreakoutStrategy:
             Signal dict if breakout detected, None otherwise
         """
         if len(data) < self.lookback:
+            from ..utils.logger import logger as debug_logger
+            debug_logger.info(f"   ⚠️ BO skipped: Insufficient data ({len(data)} bars, need {self.lookback})")
             return None
 
         # Calculate range boundaries
@@ -74,6 +76,8 @@ class BreakoutStrategy:
 
         # Check minimum range size
         if range_size_pips < self.min_range_pips:
+            from ..utils.logger import logger as debug_logger
+            debug_logger.info(f"   ⚠️ BO skipped: Range too small ({range_size_pips:.1f} pips, need {self.min_range_pips})")
             return None
 
         # Calculate average volume - handle missing volume column

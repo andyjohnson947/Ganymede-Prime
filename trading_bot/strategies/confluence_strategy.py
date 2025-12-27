@@ -171,11 +171,13 @@ class ConfluenceStrategy:
         now = get_current_time()
         last_refresh = self.last_data_refresh.get(symbol)
 
-        # Check if refresh needed
-        if last_refresh:
-            minutes_since = (now - last_refresh).total_seconds() / 60
-            if minutes_since < DATA_REFRESH_INTERVAL:
-                return  # Data still fresh
+        # In test_mode (backtesting), always refresh data
+        # In live mode, check if refresh needed
+        if not self.test_mode:
+            if last_refresh:
+                minutes_since = (now - last_refresh).total_seconds() / 60
+                if minutes_since < DATA_REFRESH_INTERVAL:
+                    return  # Data still fresh
 
         # Fetch H1 data with error handling
         try:
@@ -183,6 +185,9 @@ class ConfluenceStrategy:
             if h1_data is None:
                 logger.warning(f"⚠️ Failed to fetch H1 data for {symbol}")
                 return
+
+            if self.test_mode:
+                logger.debug(f"📊 Refreshed H1 data for {symbol}: {len(h1_data)} bars")
 
             # Calculate VWAP on H1 data
             h1_data = self.signal_detector.vwap.calculate(h1_data)
@@ -429,6 +434,8 @@ class ConfluenceStrategy:
         TRENDING → RANGING: BO rejected → Try MR
         """
         if symbol not in self.market_data_cache:
+            if self.test_mode:
+                logger.info(f"⚠️ No market data cached for {symbol}")
             return
 
         # Check if symbol is blacklisted (due to trending market)
@@ -463,6 +470,9 @@ class ConfluenceStrategy:
 
         # OPTIMIZATION: Analyze market regime ONCE (shared by both strategies)
         market_regime = self._analyze_market_regime(h1_data)
+
+        if self.test_mode:
+            logger.info(f"📊 {symbol}: Regime={market_regime['regime']}, MR={can_trade_mr}, BO={can_trade_bo}")
 
         # BIDIRECTIONAL ROUTING: Prioritize based on regime, fallback to opposite strategy
         if market_regime['regime'] == 'ranging_confirmed':
@@ -507,10 +517,15 @@ class ConfluenceStrategy:
                 signal = self._detect_breakout_signal(symbol, h1_data)
 
         if signal is None:
+            if self.test_mode:
+                logger.debug(f"❌ No signal detected for {symbol} (regime: {market_regime['regime']})")
             return
 
         # Signal detected!
         self.stats['signals_detected'] += 1
+
+        if self.test_mode:
+            logger.info(f"✅ SIGNAL DETECTED for {symbol}!")
 
         logger.info(f"🎯 Signal: {signal.get('strategy_type', 'unknown').upper()}")
         logger.info(self.signal_detector.get_signal_summary(signal))

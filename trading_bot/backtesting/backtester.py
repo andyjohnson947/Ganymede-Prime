@@ -205,7 +205,7 @@ class Backtester:
 
             # Run strategy loop
             try:
-                self.strategy.run_once()
+                self.strategy.run_once(self.symbols)
             except Exception as e:
                 logger.error(f"Strategy error at {self.current_time}: {e}")
                 self._log_event('error', f"Strategy error: {e}")

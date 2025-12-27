@@ -130,6 +130,17 @@ class ConfluenceStrategy:
         for key, value in self.stats.items():
             logger.info(f"{key.replace('_', ' ').title()}: {value}")
 
+    def run_once(self, symbols: Optional[List[str]] = None):
+        """
+        Run one iteration of the trading loop (for backtesting)
+
+        Args:
+            symbols: List of symbols to trade (defaults to SYMBOLS from config)
+        """
+        if symbols is None:
+            symbols = SYMBOLS
+        self._trading_loop(symbols)
+
     def _trading_loop(self, symbols: List[str]):
         """
         Main trading loop iteration
